@@ -1,46 +1,85 @@
 const db= require('../config/database')
-async function getMembers(req,res){
+async function getMembers(req,res,next){
    try{ 
     const [result]=await db.query('select * from members')
     //wrapping result array in an object for api consistency
-    res.status(200).json({members:result})
+       if (result.length === 0) {
+            return res.status(200).json({
+              success: true,
+              message: 'No members have been in the system.',
+              members: []
+            });
+        }
+    res.status(200).json({
+      success:true,
+      members:result})
 }
 catch(error){
   //internal server error
-    res.status(500).json({message:'server error',error: error.message})
+    next(error)
   }
 }
-async function createMember(req,res){
+async function createMember(req,res,next){
  try{   
   // Destructure necessary fields from the request body.
     const {first_name,last_name,email,phone_number}=req.body
     // Ensure that mandatory fields (name,email and phone number) are provided.
     if (!first_name || !last_name || !email ||!phone_number) {
-            return res.status(400).json({ message: 'First name, last name, email and phone_number are required.' });
+            const err=new Error('First name, last name, email and phone_number are required.')
+            err.statusCode=400;
+            return next(err)
         }
     const[result]=await db.query
             ('insert into members(first_name,last_name,email,phone_number) values(?,?,?,?)',
             [first_name,last_name,email,phone_number])
     res.status(201).json({
-    message:"member created successfully",
+     success:true,
+    message:"Member created successfully",
     member_id: result.insertId // Retrieves the auto-generated/autoincrement primary key ID.
     });
   }
   catch(error){
-    if (error.code && error.code.startsWith('ER_DUP_ENTRY')) {
-             return res.status(400).json({ message: 'This email or phone number is already registered.', error: error.message });
-        }
-        // Handle all other unhandled server/database errors.
-    res.status(500).json({message:'server:error',error:error.message})
+   next(error)
   }
 }
-async function updateMemberInfo(req,res){
+ async function getDetailMember(req, res, next) {
+try {
+const id = req.params.id;
+if (!id) {
+const err = new Error('Member ID is required in the URL path.');
+err.statusCode = 400;
+return next(err);
+}
+const [result] = await db.query('select * from members where member_id = ?', [id]);
+// 404 Not Found Check
+if (result.length === 0) {
+const err = new Error(`Member with ID ${id} not found.`);
+err.statusCode = 404;
+return next(err);
+}
+res.status(200).json({
+success: true,
+member: result[0]
+});
+} catch (error) {
+next(error);
+}
+}
+async function updateMemberInfo(req,res,next){
 try{
   const id=req.params.id
 const updates=req.body
 if (!id || Object.keys(updates).length === 0) {
-            return res.status(400).json({ message: 'Member ID and update data are required.' });
+      const err=new Error('Member ID and update data are required.')
+      err.statusCode=400;
+      return next(err)
         }
+  const [[{ count }]] = await db.query('SELECT COUNT(*) as count FROM members WHERE member_id = ?', [id]);
+    if (count === 0) {
+      const err = new Error(`Member with ID ${id} not found.`);
+      err.statusCode = 404;
+      return next(err);
+                }
         // Build SET clause dynamically
 const setclause=Object.keys(updates).map(key=>`${key}=?`).join(',')
 const values=Object.values(updates)
@@ -49,48 +88,48 @@ const [result]=await db.query
         (`update members set ${setclause} where member_id=?`,
         values )
     if(result.affectedRows>0){
-      res.status(200).json({message:"member info updated succesfully"})
+      res.status(200).json({
+        success:true,
+        message:"Member info updated succesfully"})
     } 
     else{
-      res.status(404).json({message:"failed to updated membernfo "})
+   // Record existed (checked above), but affectedRows is 0 because nothing changed
+      return res.status(200).json({
+                success: true,
+                message: "Update successful (no new changes were needed)."
+                });
     }
   }
     catch(error){
-// Handle MySQL Duplicate Entry error (ER_DUP_ENTRY).
-// This occurs if the user tries to update the email a value already used by another member.
-      if (error.code && error.code.startsWith('ER_DUP_ENTRY')) {
-          return res.status(400).json({ message:'This email is already registered and conflicts with an existing member record.', error: error.message });
-        }
-// Handle all other unhandled server/database errors.
-      res.status(500).json({message:'server error', error:error.message})
+       next(error)
     }
 }
-async function deleteMember(req,res){
+async function deleteMember(req,res,next){
 try{    
   const id=req.params.id
   // Ensure the Member ID is present in the URL path parameters.
   if (!id) {
-            return res.status(400).json({ message: 'Member ID is required for deletion.' });
+          const err=new Error('Member ID is required for deletion.')
+          err.statusCode=400;
+          return next(err)
         }
     const [result]=await db.query('delete from members where member_id = (?)',[id])
     // Check affectedRows: Determines if a member was found and deleted.
     if(result.affectedRows>0){
-    res.status(200).json({message:"Member removed succesfully"})
+    res.status(200).json({
+      success:true,
+      message:"Member removed succesfully"})
 }
 else{
-  res.status(404).json({message:"Member deletion failed: Member not found."})
+ const err=new Error(`Member ID ${id} not found.`)
+          err.statusCode=404;
+          return next(err)
 }}
 catch(error){
-  // Handle Foreign Key Constraint Violation (ER_ROW_IS_REFERENCED).
-  // This prevents deletion if the member has active loans or history in the 'loans' table.
-  if (error.code && error.code.startsWith('ER_ROW_IS_REFERENCED')) {
-        return res.status(400).json({ message: 'Cannot delete member: Active loans or records are associated with this ID.', error: error.message });
-        }
-        // Handle all other unhandled server/database errors.
-  res.status(500).json({message:'server error',error:error.message})
+next(error)
 }
 }
-async function searchMembers(req,res){
+async function searchMembers(req,res,next){
 try{  
   const{search}=req.query
 //we only have one subsequent query to build and dont need 1=1
@@ -105,28 +144,36 @@ try{
   }
   // Execute the dynamically built query using parameterized safety.
   const [result]=await db.query(query,params);
-  // --- SUCCESS RESPONSE (200 OK) ---
+ if (result.length === 0) {
+    return res.status(200).json({
+        success: true,
+        message: 'No member matched your search criteria.',
+        members: []
+    });
+}
   // Returns results wrapped in a 'members' object for API consistency.
-  res.status(200).json({ members: result });}
+  res.status(200).json({
+    success:true,
+    members: result });}
   catch(error){
-    //internal server error
-    res.status(500).json({message:'server error cant retrieve data', error: error.message})
+    next(error)
   }
 }
 
-async function getMemberStats(req, res) {
+async function getMemberStats(req, res,next) {
  try {
   const [result] = await db.query('SELECT COUNT(*) as total FROM members');
-  res.json(result[0]);
+  res.status(200).json({
+            success: true,
+            total_members: result[0].total 
+        });
 }
 catch(error){
-  res.status(500).json({ 
-            message: 'Server error while fetching member statistics.', 
-            error: error.message 
-        });
+next(error)
 }
 }
 module.exports={getMembers,
+                getDetailMember,
                 createMember,
                 deleteMember,
                 updateMemberInfo,

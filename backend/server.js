@@ -4,8 +4,10 @@ require('dotenv').config({path:'../.env'});
 // Require the database connection utility
 //the server starts running only when database is connected
 const db=require('./config/database')
+console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
 const port=3000
 const app=express()
+const {notFoundHandler,centralErrorHandler}=require('./middleware/errorHandler')
 // --- MIDDLEWARE SETUP ---
 // Enable Express to parse incoming JSON request bodies
 app.use(express.json())
@@ -16,15 +18,12 @@ app.get('/', (req, res) => {
 const bookroutes=require('./routes/bookRoutes')
 const memberRoutes=require('./routes/memberRoutes')
 const loanRoutes=require('./routes/loanRoutes')
-// --- ROUTE MOUNTING ---
 // Mount the imported routers to specific base paths
 app.use('/books', bookroutes);
 app.use('/members',memberRoutes);
 app.use('/loans',loanRoutes);
-// --- 404 NOT FOUND HANDLER (Must be LAST middleware) ---
-app.use((req, res, next) => {
-    res.status(404).json({ message: "Endpoint not found. Check the URL and method." });
-});
+app.use(notFoundHandler);
+app.use(centralErrorHandler);
 async function startServer(){
 try{
     await db.getConnection()

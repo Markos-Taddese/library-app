@@ -1,11 +1,13 @@
 const db=require('../config/database')
-async function createLoans(req,res){
+async function createLoans(req,res,next){
 let connection;
     try{
       const {book_id,member_id}=req.body
       //check the required inputs are present in the request body
      if (!book_id||!member_id) {
-           return res.status(400).json({ message: 'Book ID and Member ID are required for loan creation.' });
+         const err=new Error('Book ID and Member ID are required for loan creation.')
+          err.statusCode=400;
+          return next(err)
         }
     connection=await db.getConnection()
     await connection.beginTransaction()
@@ -16,13 +18,18 @@ let connection;
       if (book.length === 0)
         {
           await connection.rollback();  
-         return res.status(409).json({ message: 'Book not available for loan or ID is invalid.' });
+        const err=new Error('Book not available for loan or ID is invalid.')
+        //409 coz book exists int the database but its state(available=false)
+          err.statusCode=409;
+          return next(err)
         }
          const [member]=await connection.query('select * from members where member_id=?',[member_id])
       //Rollback if the member isnt available
      if (member.length === 0) {
           await connection.rollback();  
-         return res.status(404).json({ message: 'member not available for loan or ID is invalid.' });
+          const err=new Error('Member not available for loan or ID is invalid.')
+          err.statusCode=404;//404 bcoz the member dont exist in the database at all
+          return next(err)
         }
     await connection.query(`insert into loans (book_id, member_id, loan_date, due_date)
                             values(?,?,current_date(), date_add(current_date(),interval 14 days))`,
@@ -32,22 +39,20 @@ let connection;
     //commits only when all queries were successful, the process is atomic
     await connection.commit(); 
     
-    res.status(201).json({message: 'Book loaned successfully'});                
+    res.status(201).json({
+      success:true,
+      message: 'Book loaned successfully'});                
     }
     catch(error){
     //if the error happens while there's a database connection
       if(connection){
    await connection.rollback();
-   return res.status(500).json({ 
-                message: 'Transaction failed during processing. Changes rolled back.', 
-                error: error.message 
-            });
+  next(error)
       }
     // and if the error is happen bc theres no connection of database at the momemnt/ was never made
-  return res.status(503).json({ 
-  message: 'Database connection failed. Unable to process request.', 
-  error: error.message
-        });
+        const err=new Error('Database connection failed. Unable to process request.')
+          err.statusCode=503;
+          return next(err)
     }
     // realease the connection regardless of success or failure
     finally{
@@ -57,7 +62,7 @@ let connection;
     }
 }
 
-async function getActiveLoans(req,res){
+async function getActiveLoans(req,res,next){
   //look for active loans by fetching data where specifically return_date is null
  try{
   const [loans]=await db.query(`select members.member_id, 
@@ -70,23 +75,31 @@ async function getActiveLoans(req,res){
 // Ensure 200 OK is returned when no loans are found, 
  // avoiding a 500 error and providing a clear success message.
  if(loans.length===0){
- return res.status(200).json({message:'no active loans available'})
+ return res.status(200).json({
+  success:true,
+  message:'no active loans available',
+  active_loans:[]})
 }
-return res.status(200).json(loans);
+return res.status(200).json({
+  success:true,
+  active_loans:loans});
 }
 // respond internal error as the error is directly related with the database 
 catch(error){
-res.status(500).json({message:'something went wrong',  error: error.message})
+  //handled by our centralErrorHandler
+next(error)
 }
 }
-async function returnLoan(req,res){
+async function returnLoan(req,res,next){
 let connection;// declare the connection globally to use everywhere in the function
     
 try{  
     const {loan_id}=req.body
     //check the required input(loan_id) is present in the request body
    if (!loan_id) {
-     return res.status(400).json({ message: 'Loan ID is required for return.' });
+   const err=new Error('Loan ID is required for return.')
+   err.statusCode=400;
+   return next(err)
         }
     connection=await db.getConnection()
     await connection.beginTransaction()
@@ -98,7 +111,9 @@ try{
       await connection.rollback();
     // Use 409 Conflict: The requested loan cannot be returned 
     // because it is either invalid or already marked as returned.
-    return res.status(409).json({ message: 'No active loan found with that ID.' });
+    const err=new Error('No active loan found with that ID.' );
+    err.statusCode=409;
+    return next(err) //will be handled by centralErrorHandler
     }
     const book_id=loanData[0].book_id // destructure book_id from the fetched row data
       // The preceding SELECT FOR UPDATE verified the loan is active and locked it.
@@ -107,20 +122,19 @@ try{
     await connection.query(`update books set available=true where book_id=?`,[book_id])
     await connection.commit(); 
    
-    res.status(201).json({message: 'Book returned successfully'});
+    res.status(201).json({
+      success:true,
+      message: 'Book returned successfully',
+     });
    }
    catch(error){
     if(connection){
        await connection.rollback();
-       return res.status(500).json({ 
-                message: 'An internal transaction error occurred.',
-                error: error.message
-            });
+       next(error)
     }
-return res.status(503).json({ 
-            message: 'Database connection failed. Unable to process request.', 
-            error: error.message 
-        });
+const err=new Error('Database connection failed. Unable to process request.')
+err.statusCode=503;
+return next(err)
    }
    finally{
     if(connection){
@@ -129,12 +143,14 @@ return res.status(503).json({
    }
 }
 
-async function  getLoanByMember(req,res){
+async function  getLoanByMember(req,res,next){
 
 try{
   const member_id=req.params.id
   if (!member_id) {
-            return res.status(400).json({ message: 'Member ID is required in the URL path.' });
+          const err=new Error('Member ID is required in the URL path.')
+          err.statusCode=400;
+          return next(err)
         }
   //validate if the member is actually existsin members table
   //chose count to do that in the query bc we need the to check simply the existence of that id not fetch the whole data
@@ -142,9 +158,9 @@ try{
   const memberExist=count>0;
    // This prevents returning "No loan history" for a fake ID (which should be 404).
   if (!memberExist) {
-    return res.status(404).json({ 
-        message: `Error: Member with ID ${member_id} not found.` 
-    });
+    const err=new Error(`Error: Member with ID ${member_id} not found.`)
+    err.statusCode=404;
+     return next(err)
 }
   const [result]=await db.query(`select concat(members.first_name," ",members.last_name) as member_name,
                                  books.title, books.author, loans.loan_date, loans.return_date, loans.due_date
@@ -154,23 +170,29 @@ try{
                                  where members.member_id=?
                                  order by loans.loan_date desc`,[member_id])
 if(result.length===0){
- return res.status(200).json({message:`Member ${member_id} exists but, no loans history for this member`,history: []})
+ return res.status(200).json({
+  success:true,
+  message:`Member ${member_id} exists but, no loans history for this member`,
+  history: []})
 }
 // Return 200 OK, wrapping the array of results in the consistent 'history' key.
 //this will make it easier during frontend developmemnt
-return res.status(200).json({ history: result });
+return res.status(200).json({
+  success:true,
+  history: result });
 }
 catch(error){
-  // Return 500 Internal Server Error for unhandled database/server exceptions.
-  res.status(500).json({message:'error occured while fetching member loan history',  error: error.message})
+next(error)
 }
   }
-async function  getLoanByBook(req,res){
+async function  getLoanByBook(req,res,next){
 
 try{
   const book_id=req.params.id
   if (!book_id) {
-            return res.status(400).json({ message: 'Book ID is required in the URL path.' });
+            const err=new Error('Book ID is required in the URL path.')
+            err.statusCode=400;
+            return next(err)
         }
         //validate if the book is actually existsin members table
         //using count for the same reason we use it in members
@@ -178,9 +200,9 @@ try{
   const bookExist=count>0;
   if (!bookExist) {
     // Return 404 Not Found: The requested book resource does not exist.
-    return res.status(404).json({ 
-        message: `Error: Book with ID ${book_id} not found.` 
-    });
+    const err=new Error(`Error: Book with ID ${book_id} not found.`)
+    err.statusCode=404;
+    return next(err)
 }
   const [result]=await db.query(`select concat(members.first_name," ",members.last_name) as member_name,
                                  books.title, books.author, loans.loan_date, loans.return_date, loans.due_date
@@ -191,16 +213,20 @@ try{
                                  order by loans.loan_date desc`,[book_id])
 if(result.length===0){
   // Return 200 OK with a clear message and a consistent 'history' key (as an empty array).
- return res.status(200).json({message:'Book ${book_id} exists but, no loans history for this book',history:[]})
+ return res.status(200).json({
+  success:true,
+  message:'Book ${book_id} exists but, no loans history for this book',
+  history:[]})
 }
-return res.status(200).json({history:result});
+return res.status(200).json({
+  success:true,
+  history:result});
 }
-// Return 500 Internal Server Error for unhandled database/server exceptions.
   catch(error){
-       res.status(500).json({message:'error occured while fetching book loan history',  error: error.message})
+      next(error)
     }
 }
-async function getOverdueLoans(req,res){
+async function getOverdueLoans(req,res,next){
 try{  
   // Query: Join loans, members, and books to track overdue loans.
    const[overdueLoans]=await db.query(`select members.member_id, concat(members.first_name," ",members.last_name),
@@ -212,18 +238,20 @@ try{
                            where return_date is null and loans.due_date<current_date()
                            ORDER BY loans.due_date ASC`)
    if(overdueLoans.length===0){
-              return res.status(200).json({message:'No loans are currently marked as overdue.',history:[]})
+              return res.status(200).json({
+                success:true,
+                message:'No loans are currently marked as overdue.',
+                history:[]})
      }
-   return res.status(200).json({history:overdueLoans});
+   return res.status(200).json({
+    success:true,
+    history:overdueLoans});
      }
      catch(error){
-      return res.status(500).json({
-            message: 'Failed to retrieve overdue loans due to a server error.', 
-            error: error.message
-        });
+      next(error)
      }
 }
-async function getMembersWithOverdues(req,res){
+async function getMembersWithOverdues(req,res,next){
 try {    
 // Query: Join loans, members, and books to count overdue loans per member.
   const[overduemembers]=await db.query(`select members.member_id, concat(members.first_name," ",members.last_name) as members,
@@ -236,25 +264,29 @@ try {
                                            order by overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
 if(overduemembers.length===0){
-    return res.status(200).json({message:'No members are currently have overdues.',history:[]})
+    return res.status(200).json({
+      success:true,
+      message:'No members are currently have overdues.',
+      history:[]})
      }
-  return res.status(200).json({history:overduemembers});
+  return res.status(200).json({
+       success:true,
+      history:overduemembers});
   }
 catch(error){
    // Return 500 Internal Server Error for unhandled database/server exceptions.
-      return res.status(500).json({
-            message: 'Failed to retrieve members with overdue.', 
-            error: error.message
-        });
+      next(error)
      }
 }
 
-async function renewLoan(req,res){
+async function renewLoan(req,res,next){
   let connection;
 try{
     const {loan_id}=req.body
     if (!loan_id) {
-             return res.status(400).json({ message: 'Loan ID is required for renewal.' });
+          const err=new Error('Loan ID is required for renewal.')
+          err.statusCode=400;
+          return next(err)
         }
     connection=await db.getConnection()
     await connection.beginTransaction()
@@ -273,12 +305,14 @@ const [updateResult] = await connection.query(
 //and rollback if it dont
     if (updateResult.affectedRows === 0) {
             await connection.rollback();
-            return res.status(400).json({ message: `Renewal failed: Loan is either not active, 
-                                                    past its due date, or the ID is invalid.` });
+            const err=new Error(`Renewal failed: Loan is either not active, 
+                                past its due date, or the ID is invalid.`)
+            return next(err)
         }
 //commit if change is made, every query needs to be successful
       await connection.commit()
       return res.status(200).json({
+            success:true,
             message: `Loan ID ${loan_id} successfully renewed for another 14 days.`,
             new_due_date_info: 'The new due date is 14 days from today.'
         });
@@ -286,16 +320,12 @@ const [updateResult] = await connection.query(
         catch (error) {
       if(connection){
        await connection.rollback();
-       return res.status(500).json({ 
-             message: 'An internal server error occurred during the transaction. Changes rolled back.', 
-                error: error.message
-            });
+       next(error)
     }
     //retrun this when database connection failed or was never made
-return res.status(503).json({ 
-            message: 'Database connection failed. Unable to process request.', 
-            error: error.message 
-        });
+const err=new Error('Database connection failed. Unable to process request.')
+err.statusCode=503;
+return next(error)
     } 
      // realease the connection regardless of success or failure  
     finally {
