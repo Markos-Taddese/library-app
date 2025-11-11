@@ -11,13 +11,13 @@ const {
        }=require('../controllers/bookController')
 const route=express.Router()
 // These routes are mounted onto a base URL (/books) in server.js to form the final API endpoints.
-route.get('/',getBooks)
-route.get('/:id',getDetailBook)
 route.post('/',saveBooks)
+route.get('/all',getBooks)
+route.get('/search',searchBooks)
+route.get('/stats',getBookStats)
+route.get('/:id',getDetailBook)
 route.delete('/:id',deleteBooks)
 // PUT /books/:id
 route.put('/:id',updateBooks)
-route.get('/search',searchBooks)
-route.get('/status',getBookStats)
 //export our route to be used in server file for mounting
 module.exports = route

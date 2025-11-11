@@ -1,6 +1,6 @@
 const express=require('express')
 // Load environment variables first
-require('dotenv').config({path:'../.env'});
+require('dotenv').config();
 // Require the database connection utility
 //the server starts running only when database is connected
 const db=require('./config/database')

@@ -1,29 +1,35 @@
 const db=require('../config/database')
 async function createLoans(req,res,next){
 let connection;
-    try{
-      const {book_id,member_id}=req.body
-      //check the required inputs are present in the request body
-     if (!book_id||!member_id) {
-         const err=new Error('Book ID and Member ID are required for loan creation.')
-          err.statusCode=400;
-          return next(err)
+  try{
+    const {copy_id,member_id}=req.body
+    //check the required inputs are present in the request body
+    if (!copy_id||!member_id) {
+      const err=new Error(`Book's copy ID and Member ID are required for loan creation.`)
+      err.statusCode=400;
+      return next(err)
         }
     connection=await db.getConnection()
     await connection.beginTransaction()
     
-    const [book]=await connection.query(`select * from books where book_id=? 
-                                         and available=true for update`,[book_id])
+    const [bookCopy]=await connection.query(`SELECT * FROM book_copies WHERE copy_id=? 
+                                         FOR UPDATE`,[copy_id])
       //Rollback if the book isnt available
-      if (book.length === 0)
+      if (bookCopy.length === 0)
         {
           await connection.rollback();  
-        const err=new Error('Book not available for loan or ID is invalid.')
-        //409 coz book exists int the database but its state(available=false)
-          err.statusCode=409;
+        const err=new Error(`Book copy with ID ${copy_id} not found.`)
+         err.statusCode=404;
           return next(err)
         }
-         const [member]=await connection.query('select * from members where member_id=?',[member_id])
+        if(bookCopy[0].status!=='available'){
+          await connection.rollback()
+          const err=new Error(`Book copy is currently ${copy[0].status} and cannot be loaned.`)
+          //409 coz book exists in the database but its state(available=false)
+          err.statusCode=409;
+          return next(err);
+        }
+         const [member]=await connection.query('SELECT * FROM members WHERE member_id=?',[member_id])
       //Rollback if the member isnt available
      if (member.length === 0) {
           await connection.rollback();  
@@ -31,23 +37,25 @@ let connection;
           err.statusCode=404;//404 bcoz the member dont exist in the database at all
           return next(err)
         }
-    await connection.query(`insert into loans (book_id, member_id, loan_date, due_date)
-                            values(?,?,current_date(), date_add(current_date(),interval 14 days))`,
-                            [book_id,member_id])
+    await connection.query(`INSERT INTO loans (copy_id, member_id, loan_date, due_date)
+                            VALUES(?,?,CURRENT_DATE(), DATE_ADD(CURRENT_DATE(),interval 14 days))`,
+                            [copy_id,member_id])
     //the nature of 'insert' makes the need of checking if theres affected row, obsolete
-    await connection.query(`update books set available= false where book_id=?`,[book_id])   
+    await connection.query(`UPDATE book_copies SET status= 'loaned' WHERE copy_id=?`,[copy_id])   
     //commits only when all queries were successful, the process is atomic
     await connection.commit(); 
     
     res.status(201).json({
       success:true,
-      message: 'Book loaned successfully'});                
+      book_id: copy[0].book_id,
+      copy_id: copy_id,
+      message: 'Book Copy loaned successfully'});                
     }
     catch(error){
     //if the error happens while there's a database connection
-      if(connection){
+if(connection){
    await connection.rollback();
-  next(error)
+   return  next(error)
       }
     // and if the error is happen bc theres no connection of database at the momemnt/ was never made
         const err=new Error('Database connection failed. Unable to process request.')
@@ -65,13 +73,16 @@ let connection;
 async function getActiveLoans(req,res,next){
   //look for active loans by fetching data where specifically return_date is null
  try{
-  const [loans]=await db.query(`select members.member_id, 
-                           concat(members.first_name," ",members.last_name) as member_name,
-                           books.title,books.author,loans.loan_date, loans.return_date,loans.due_date
-                           from loans 
-                           inner join members on loans.member_id=members.member_id
-                           inner join books on loans.book_id=books.book_id
-                           where loans.return_date is null`)
+  const [loans]=await db.query(`SELECT l.member_id, 
+                           CONCAT(m.first_name," ",m.last_name) as member_name,
+                           b.title,a.author_name AS author,l.loan_date, l.return_date,l.due_date
+                           FROM loans l
+                           INNER JOIN members m on l.member_id=m.member_id
+                           INNER JOIN book_copies bc on l.copy_id=bc.copy_id
+                           INNER JOIN books b on b.book_id=bc.book_id
+                           INNER JOIN authors a on a.author_id=b.author_id
+                           WHERE l.return_date IS NULL
+                           ORDER BY l.loan_date DESC`)
 // Ensure 200 OK is returned when no loans are found, 
  // avoiding a 500 error and providing a clear success message.
  if(loans.length===0){
@@ -82,6 +93,7 @@ async function getActiveLoans(req,res,next){
 }
 return res.status(200).json({
   success:true,
+  count:loans.length,
   active_loans:loans});
 }
 // respond internal error as the error is directly related with the database 
@@ -104,8 +116,8 @@ try{
     connection=await db.getConnection()
     await connection.beginTransaction()
     //lock the query with 'for update' to avoid race condition
-    const [loanData]= await connection.query (`select book_id from loans where loan_id=? and 
-                                              return_date is null for update`,[loan_id])
+    const [loanData]= await connection.query (`SELECT copy_id FROM loans WHERE loan_id=? AND
+                                              return_date IS NULL FOR UPDATE`,[loan_id])
     //Rollback if the loan is already returned or the ID is invalid
     if(loanData.length===0){
       await connection.rollback();
@@ -115,22 +127,24 @@ try{
     err.statusCode=409;
     return next(err) //will be handled by centralErrorHandler
     }
-    const book_id=loanData[0].book_id // destructure book_id from the fetched row data
-      // The preceding SELECT FOR UPDATE verified the loan is active and locked it.
+    const copy_id=loanData[0].copy_id // destructure copy_id from the fetched row data
+    // The preceding SELECT FOR UPDATE verified the loan is active and locked it.
     // **AFFECTED ROWS CHECK IS OMITTED HERE** because the row is guaranteed to be updated.
-    await connection.query(`update loans set return_date=current_date where loan_id=? and return_date is null`,[loan_id])
-    await connection.query(`update books set available=true where book_id=?`,[book_id])
+    await connection.query(`UPDATE loans SET return_date=CURRENT_DATE WHERE loan_id=? AND return_date IS NULL`,[loan_id])
+    await connection.query(`UPDATE book_copies SET status='available' WHERE copy_id=?`,[copy_id])
     await connection.commit(); 
    
-    res.status(201).json({
+    res.status(200).json({
       success:true,
       message: 'Book returned successfully',
+      loan_id: loan_id,
+      copy_id: copy_id
      });
    }
    catch(error){
     if(connection){
        await connection.rollback();
-       next(error)
+      return  next(error)
     }
 const err=new Error('Database connection failed. Unable to process request.')
 err.statusCode=503;
@@ -154,7 +168,7 @@ try{
         }
   //validate if the member is actually existsin members table
   //chose count to do that in the query bc we need the to check simply the existence of that id not fetch the whole data
-  const[[{count}]]=await db.query(`select count(*) as count from members where member_id=?`,[member_id])
+  const[[{count}]]=await db.query(`SELECT COUNT(*) as count FROM members WHERE member_id=?`,[member_id])
   const memberExist=count>0;
    // This prevents returning "No loan history" for a fake ID (which should be 404).
   if (!memberExist) {
@@ -162,13 +176,15 @@ try{
     err.statusCode=404;
      return next(err)
 }
-  const [result]=await db.query(`select concat(members.first_name," ",members.last_name) as member_name,
-                                 books.title, books.author, loans.loan_date, loans.return_date, loans.due_date
-                                 from loans
-                                 inner join members on loans.member_id=members.member_id
-                                 inner join books on loans.book_id=books.book_id
-                                 where members.member_id=?
-                                 order by loans.loan_date desc`,[member_id])
+  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) as member_name,
+                                 b.title, a.author_name,l.loan_date,l.return_date,l.due_date
+                                 FROM loans l
+                                 INNER JOIN members m on l.member_id=m.member_id
+                                 INNER JOIN book_copies bc on l.copy_id=bc.copy_id
+                                 INNER JOIN books b on b.book_id=bc.book_id
+                                 INNER JOIN authors a on a.author_id=b.author_id 
+                                 WHERE m.member_id=?
+                                 ORDER BY l.loan_date DESC`,[member_id])
 if(result.length===0){
  return res.status(200).json({
   success:true,
@@ -196,7 +212,7 @@ try{
         }
         //validate if the book is actually existsin members table
         //using count for the same reason we use it in members
-  [[{count}]]=await db.query(`select count(*) as count from books where book_id=?`,[book_id])
+  [[{count}]]=await db.query(`SELECT COUNT(*) AS count FROM books WHERE book_id=?`,[book_id])
   const bookExist=count>0;
   if (!bookExist) {
     // Return 404 Not Found: The requested book resource does not exist.
@@ -204,18 +220,21 @@ try{
     err.statusCode=404;
     return next(err)
 }
-  const [result]=await db.query(`select concat(members.first_name," ",members.last_name) as member_name,
-                                 books.title, books.author, loans.loan_date, loans.return_date, loans.due_date
-                                 from loans
-                                 inner join members on loans.member_id=members.member_id
-                                 inner join books on loans.book_id=books.book_id
-                                 where books.book_id=?
-                                 order by loans.loan_date desc`,[book_id])
+  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) AS member_name,
+                                 b.title, b.author,l.loan_date,l.return_date,l.due_date,l.copy_id
+                                 FROM loans L
+                                 INNER JOIN members m ON l.member_id=m.member_id
+                                 INNER JOIN book_copies bc ON l.copy_id=bc.copy_id
+                                 INNER JOIN books b on b.book_id=bc.book_id
+                                 INNER JOIN authors a on a.author_id=b.author_id 
+                                 WHERE b.book_id=?
+                                 ORDER BY l.loan_date DESC`,[book_id])
 if(result.length===0){
   // Return 200 OK with a clear message and a consistent 'history' key (as an empty array).
  return res.status(200).json({
   success:true,
-  message:'Book ${book_id} exists but, no loans history for this book',
+  message:`Book ID ${book_id} exists but, no loans history for this book`,
+  count:result.length,
   history:[]})
 }
 return res.status(200).json({
@@ -229,14 +248,16 @@ return res.status(200).json({
 async function getOverdueLoans(req,res,next){
 try{  
   // Query: Join loans, members, and books to track overdue loans.
-   const[overdueLoans]=await db.query(`select members.member_id, concat(members.first_name," ",members.last_name),
-                           books.title,books.author,loans.loan_id,loans.loan_date,loans.due_date,
-                           DATEDIFF(current_date(), loans.due_date) as days_overdue
-                           from loans 
-                           inner join members on loans.member_id=members.member_id
-                           inner join books on loans.book_id=books.book_id
-                           where return_date is null and loans.due_date<current_date()
-                           ORDER BY loans.due_date ASC`)
+   const[overdueLoans]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name)AS member_name,
+                           b.title,a.author_name,l.loan_id,l.loan_date,l.due_date,
+                           DATEDIFF(CURRENT_DATE(), l.due_date) AS days_overdue
+                           FROM loans 
+                           INNER JOIN members m ON l.member_id=m.member_id
+                           INNER JOIN book_copies bc on l.copy_id=bc.copy_id
+                           INNER JOIN books b on b.book_id=bc.book_id
+                           INNER JOIN authors a on a.author_id=b.author_id
+                           WHERE return_date IS NULL AND l.due_date<CURRENT_DATE()
+                           ORDER BY l.due_date ASC`)
    if(overdueLoans.length===0){
               return res.status(200).json({
                 success:true,
@@ -245,7 +266,9 @@ try{
      }
    return res.status(200).json({
     success:true,
-    history:overdueLoans});
+    count: overdueLoans.length,
+    history:overdueLoans
+  });
      }
      catch(error){
       next(error)
@@ -254,14 +277,13 @@ try{
 async function getMembersWithOverdues(req,res,next){
 try {    
 // Query: Join loans, members, and books to count overdue loans per member.
-  const[overduemembers]=await db.query(`select members.member_id, concat(members.first_name," ",members.last_name) as members,
-                                           count(loans.loan_id) as overdues
-                                           from loans 
-                                           inner join members on loans.member_id=members.member_id
-                                           inner join books on loans.book_id=books.book_id
-                                           where return_date is null and loans.due_date<current_date()
-                                           group by  members.member_id,members
-                                           order by overdues DESC;`)
+  const[overduemembers]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name) AS members,
+                                        COUNT(l.loan_id) AS overdues
+                                        FROM loans l
+                                        INNER JOIN members m ON l.member_id=m.member_id
+                                        WHERE return_date IS NULL AND l.due_date<CURRENT_DATE()
+                                        GROUP BY  m.member_id,members
+                                        ORDER BY overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
 if(overduemembers.length===0){
     return res.status(200).json({
@@ -271,6 +293,7 @@ if(overduemembers.length===0){
      }
   return res.status(200).json({
        success:true,
+       count: overduemembers.length,
       history:overduemembers});
   }
 catch(error){
@@ -320,12 +343,12 @@ const [updateResult] = await connection.query(
         catch (error) {
       if(connection){
        await connection.rollback();
-       next(error)
+      return next(error)
     }
     //retrun this when database connection failed or was never made
 const err=new Error('Database connection failed. Unable to process request.')
 err.statusCode=503;
-return next(error)
+return next(err)
     } 
      // realease the connection regardless of success or failure  
     finally {

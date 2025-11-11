@@ -1,7 +1,7 @@
 const db= require('../config/database')
 async function getMembers(req,res,next){
    try{ 
-    const [result]=await db.query('select * from members')
+    const [result]=await db.query('SELECT * FROM members')
     //wrapping result array in an object for api consistency
        if (result.length === 0) {
             return res.status(200).json({
@@ -30,7 +30,7 @@ async function createMember(req,res,next){
             return next(err)
         }
     const[result]=await db.query
-            ('insert into members(first_name,last_name,email,phone_number) values(?,?,?,?)',
+            ('INSERT INTO members(first_name,last_name,email,phone_number) values(?,?,?,?)',
             [first_name,last_name,email,phone_number])
     res.status(201).json({
      success:true,
@@ -50,7 +50,7 @@ const err = new Error('Member ID is required in the URL path.');
 err.statusCode = 400;
 return next(err);
 }
-const [result] = await db.query('select * from members where member_id = ?', [id]);
+const [result] = await db.query('SELECT * FROM members WHERE member_id = ?', [id]);
 // 404 Not Found Check
 if (result.length === 0) {
 const err = new Error(`Member with ID ${id} not found.`);
@@ -74,7 +74,7 @@ if (!id || Object.keys(updates).length === 0) {
       err.statusCode=400;
       return next(err)
         }
-  const [[{ count }]] = await db.query('SELECT COUNT(*) as count FROM members WHERE member_id = ?', [id]);
+  const [[{ count }]] = await db.query('SELECT COUNT(*) AS count FROM members WHERE member_id = ?', [id]);
     if (count === 0) {
       const err = new Error(`Member with ID ${id} not found.`);
       err.statusCode = 404;
@@ -85,7 +85,7 @@ const setclause=Object.keys(updates).map(key=>`${key}=?`).join(',')
 const values=Object.values(updates)
 values.push(id)
 const [result]=await db.query
-        (`update members set ${setclause} where member_id=?`,
+        (`UPDATE members SET ${setclause} WHERE member_id=?`,
         values )
     if(result.affectedRows>0){
       res.status(200).json({
@@ -113,7 +113,7 @@ try{
           err.statusCode=400;
           return next(err)
         }
-    const [result]=await db.query('delete from members where member_id = (?)',[id])
+    const [result]=await db.query('DELETE FROM members WHERE member_id = (?)',[id])
     // Check affectedRows: Determines if a member was found and deleted.
     if(result.affectedRows>0){
     res.status(200).json({
@@ -134,11 +134,11 @@ try{
   const{search}=req.query
 //we only have one subsequent query to build and dont need 1=1
 //still use 1=1 for future proof, if we ever gonna have any more sunsequent query to build
-  let query='select * from members where 1=1'
+  let query='SELECT * FROM members where 1=1'
   let params=[]
   // Add condition to search both name fields using LIKE.
   if(search){
-    query+='and (first_name like ? or  last_name like ?)'
+    query+='AND (first_name like ? OR  last_name like ?)'
     // Push parameters, wrapped in wildcards (%) for partial matching.
     params.push(`%${search}%`, `%${search}%`)
   }

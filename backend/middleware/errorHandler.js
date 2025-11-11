@@ -1,4 +1,5 @@
 const centralErrorHandler=(err,req,res,next)=>{
+    console.error('SERVER ERROR CATCHED:', err.message);
    // Determine Status Code: Use one set by thrown error, or default to 500
     let statusCode=err.statusCode||err.status||500 //err.status for general/inclusiv error handling
     // Use the fallback message only when the err.message is null/undefined, 
@@ -13,7 +14,7 @@ const centralErrorHandler=(err,req,res,next)=>{
     }
     else if (err.code && err.code.startsWith('ER_ROW_IS_REFERENCED')){
         statusCode=409;
-        message = 'Data conflict: A record with this unique key already exists.';
+        message = 'Constraint violation: Cannot perform action due to linked records.';
     }
  //Overwrite potentially sensitive err.message to prevent exposing internal server details.
     else if(statusCode===500){
