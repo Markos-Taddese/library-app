@@ -8,7 +8,7 @@ const centralErrorHandler=(err,req,res,next)=>{
     let message=err.message|| 'An unexpected Internal server error occured'
     
      //  Map MySQL Error Codes
-    if(err.code && err.code.startWith('ER_DUP_ENTRY')){
+    if(err.code && err.code.startsWith('ER_DUP_ENTRY')){
         statusCode=409;
         message='Data conflict: A record with this unique key already exists.'
     }

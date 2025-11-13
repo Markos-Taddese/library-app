@@ -11,7 +11,7 @@ const {
        renewLoan}=require('../controllers/loanController')
 const route=express.Router()
 // These routes are mounted onto a base URL (/loans) in server.js to form the final API endpoints.
-route.post('/borrow',createLoans)
+route.post('/',createLoans)
 route.get('/active',getActiveLoans)
 route.put('/return',returnLoan)
 route.put('/renewal',renewLoan)

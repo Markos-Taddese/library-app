@@ -6,11 +6,13 @@ const {getMembers,
        deleteMember,
        updateMemberInfo,
        searchMembers,
-       getDetailMember
+       getDetailMember,
+       getMemberStats
        }=require('../controllers/memberController')
 // These routes are mounted onto a base URL (/loans) in server.js to form the final API endpoints.
 routes.post('/',createMember)
 routes.get('/all',getMembers)
+routes.get('/stats',getMemberStats)
 // GET /members/search
 routes.get('/search',searchMembers)
 routes.get('/:id',getDetailMember)

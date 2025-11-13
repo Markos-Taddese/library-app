@@ -150,17 +150,25 @@ if (!copyId) {
 connection= await db.getConnection();
 await connection.beginTransaction();
 // Get the book_id and author_id related to this copy before deleting it.
-const[copyInfo]=await connection.query(`SELECT b.book_id, b.author_id 
+const[copyInfo]=await connection.query(`SELECT b.book_id, b.author_id,bc.status
                                         FROM book_copies bc
                                         INNER JOIN books b ON bc.book_id=b.book_id
-                                        WHERE bc.copy_id=? `,[copyId])
+                                        WHERE bc.copy_id=? FOR UPDATE `,[copyId])
 if(copyInfo.length===0){
   await connection.rollback()
   const err = new Error(`Book's Copy with ID ${copyId} not found.`);
   err.statusCode = 404;
   return next(err);
 }
-const { book_id, author_id } = copyInfo[0];
+const { status, book_id, author_id } = copyInfo[0];
+  // If the copy is currently loaned, we must prevent the physical delete.
+if (status !== 'available') {
+await connection.rollback();
+const err = new Error(`Cannot delete copy ID ${copyId}. 
+  It is currently marked as '${status}' and must be returned first.`);
+err.statusCode = 409; // Conflict
+return next(err);
+        }
 await connection.query('DELETE FROM book_copies where copy_id=?',[copyId]);
 //Check for Remaining Copies 
 const[copiesLeft]=await connection.query(`SELECT COUNT(*) AS count 

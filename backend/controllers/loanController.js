@@ -24,7 +24,7 @@ let connection;
         }
         if(bookCopy[0].status!=='available'){
           await connection.rollback()
-          const err=new Error(`Book copy is currently ${copy[0].status} and cannot be loaned.`)
+          const err=new Error(`Book copy is currently ${bookCopy[0].status} and cannot be loaned.`)
           //409 coz book exists in the database but its state(available=false)
           err.statusCode=409;
           return next(err);
@@ -37,8 +37,15 @@ let connection;
           err.statusCode=404;//404 bcoz the member dont exist in the database at all
           return next(err)
         }
+         if (member[0].is_deleted) {
+            await connection.rollback();
+            const err = new Error(`Member ID ${member_id} is deactivated and cannot borrow books.`);
+            err.statusCode = 403; // Forbidden
+            return next(err);
+        }
+        console.log("Attempting to create loan with:", { copy_id, member_id });
     await connection.query(`INSERT INTO loans (copy_id, member_id, loan_date, due_date)
-                            VALUES(?,?,CURRENT_DATE(), DATE_ADD(CURRENT_DATE(),interval 14 days))`,
+                            VALUES(?,?,CURRENT_DATE(), DATE_ADD(CURRENT_DATE(),INTERVAL 14 DAY))`,
                             [copy_id,member_id])
     //the nature of 'insert' makes the need of checking if theres affected row, obsolete
     await connection.query(`UPDATE book_copies SET status= 'loaned' WHERE copy_id=?`,[copy_id])   
@@ -47,7 +54,7 @@ let connection;
     
     res.status(201).json({
       success:true,
-      book_id: copy[0].book_id,
+      book_id: bookCopy[0].book_id,
       copy_id: copy_id,
       message: 'Book Copy loaned successfully'});                
     }
@@ -75,6 +82,7 @@ async function getActiveLoans(req,res,next){
  try{
   const [loans]=await db.query(`SELECT l.member_id, 
                            CONCAT(m.first_name," ",m.last_name) as member_name,
+                           CASE WHEN m.is_deleted = TRUE THEN 'Banned' ELSE 'Active' END AS member_status,
                            b.title,a.author_name AS author,l.loan_date, l.return_date,l.due_date
                            FROM loans l
                            INNER JOIN members m on l.member_id=m.member_id
@@ -176,13 +184,17 @@ try{
     err.statusCode=404;
      return next(err)
 }
-  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) as member_name,
+//left join used, if bokk copies and title were to be complelty..
+// ..delted to get member history we need everything from loans 
+//inner join would only give us the matches
+// prevents us from getting the whole loan histroy of the member for the deleted books
+  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) as member_name,b.book_id,
                                  b.title, a.author_name,l.loan_date,l.return_date,l.due_date
                                  FROM loans l
                                  INNER JOIN members m on l.member_id=m.member_id
-                                 INNER JOIN book_copies bc on l.copy_id=bc.copy_id
-                                 INNER JOIN books b on b.book_id=bc.book_id
-                                 INNER JOIN authors a on a.author_id=b.author_id 
+                                 LEFT JOIN book_copies bc on l.copy_id=bc.copy_id
+                                 LEFT JOIN books b on b.book_id=bc.book_id
+                                 LEFT JOIN authors a on a.author_id=b.author_id 
                                  WHERE m.member_id=?
                                  ORDER BY l.loan_date DESC`,[member_id])
 if(result.length===0){
@@ -220,8 +232,8 @@ try{
     err.statusCode=404;
     return next(err)
 }
-  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) AS member_name,
-                                 b.title, b.author,l.loan_date,l.return_date,l.due_date,l.copy_id
+  const [result]=await db.query(`SELECT CONCAT(m.first_name," ",m.last_name) AS member_name,m.member_id,
+                                 b.title, a.author_name,l.loan_date,l.return_date,l.due_date,l.copy_id
                                  FROM loans L
                                  INNER JOIN members m ON l.member_id=m.member_id
                                  INNER JOIN book_copies bc ON l.copy_id=bc.copy_id
@@ -251,12 +263,13 @@ try{
    const[overdueLoans]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name)AS member_name,
                            b.title,a.author_name,l.loan_id,l.loan_date,l.due_date,
                            DATEDIFF(CURRENT_DATE(), l.due_date) AS days_overdue
-                           FROM loans 
+                           FROM loans l
                            INNER JOIN members m ON l.member_id=m.member_id
                            INNER JOIN book_copies bc on l.copy_id=bc.copy_id
                            INNER JOIN books b on b.book_id=bc.book_id
                            INNER JOIN authors a on a.author_id=b.author_id
-                           WHERE return_date IS NULL AND l.due_date<CURRENT_DATE()
+                           WHERE return_date IS NULL 
+                           AND l.due_date<CURRENT_DATE()
                            ORDER BY l.due_date ASC`)
    if(overdueLoans.length===0){
               return res.status(200).json({
@@ -278,10 +291,11 @@ async function getMembersWithOverdues(req,res,next){
 try {    
 // Query: Join loans, members, and books to count overdue loans per member.
   const[overduemembers]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name) AS members,
-                                        COUNT(l.loan_id) AS overdues
+                                        COUNT(l.loan_id) AS overdues,m.email
                                         FROM loans l
                                         INNER JOIN members m ON l.member_id=m.member_id
-                                        WHERE return_date IS NULL AND l.due_date<CURRENT_DATE()
+                                        WHERE return_date IS NULL 
+                                        AND l.due_date<CURRENT_DATE()
                                         GROUP BY  m.member_id,members
                                         ORDER BY overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
@@ -317,11 +331,13 @@ try{
 // the system does not need any data returned from the row; 
 // it only needs to check the WHERE conditions. Therefore, one UPDATE query will be enough for both check and action.
 const [updateResult] = await connection.query(
-            `update loans
-             set due_date = date_add(due_date, interval 14 day)
-             where loan_id = ?
-             and return_date IS NULL
-             and due_date >= current_date()`, 
+            `UPDATE loans l
+             INNER JOIN members m ON l.member_id = m.member_id
+             SET due_date = date_add(due_date, INTERVAL 14 DAY)
+             WHERE loan_id = ?
+             AND return_date IS NULL
+             AND due_date >= CURRENT_DATE()
+             AND m.is_deleted = FALSE`, 
             [loan_id]
         );
 //check if our query brings changes to our data
@@ -329,7 +345,8 @@ const [updateResult] = await connection.query(
     if (updateResult.affectedRows === 0) {
             await connection.rollback();
             const err=new Error(`Renewal failed: Loan is either not active, 
-                                past its due date, or the ID is invalid.`)
+                                past its due date, or the ID is invalid, or the member is not active.`)
+            err.statusCode=400;
             return next(err)
         }
 //commit if change is made, every query needs to be successful
@@ -356,6 +373,7 @@ return next(err)
     }
 }
 
+
 module.exports={
     createLoans,
     getActiveLoans,
@@ -364,5 +382,5 @@ module.exports={
     getLoanByBook,
     getOverdueLoans,
     getMembersWithOverdues,
-    renewLoan
+    renewLoan,
 }
