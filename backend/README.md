@@ -55,9 +55,9 @@ $$\text{Loan Event} \longrightarrow \text{Physical Copy} \longrightarrow \text{B
 1.  **Configuration:** The project requires a **`.env`** file placed inside the **`backend/`** folder. Use the following template, substituting the **placeholder values** with the required local credentials (Note: These values are **NOT** committed to Git):
     ```
     DB_HOST=localhost
-    DB_USER=root
-    DB_PASSWORD=your_actual_db_password
-    DB_DATABASE=lms_db
+    DB_USER=[YOUR_DB_USERNAME]
+    DB_PASSWORD=[YOUR_DB_PASSWORD]
+    DB_DATABASE=[YOUR_DB_NAME]
     PORT=3000
     ```
 2.  **Navigate to Backend:**
@@ -69,8 +69,11 @@ $$\text{Loan Event} \longrightarrow \text{Physical Copy} \longrightarrow \text{B
     npm install
     ```
 4.  **Database Setup:**
-    * Create the necessary database (`lms_db` or whatever name you used).
-    * Run your SQL schema creation script to build the tables.
+    * Create the necessary database (`library_db` or whatever name you used).
+    * The table structure is in the schema.sql file. Run the following command from your terminal to execute the script and create all tables:
+    ```bash
+    mysql -u [YOUR_DB_USER] -p [YOUR_DB_NAME] < schema.sql
+    ```
 5.  **Start the API Server:**
     ```bash
     npm start
