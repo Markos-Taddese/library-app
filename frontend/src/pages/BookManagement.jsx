@@ -1,68 +1,94 @@
-import { useEffect, useState } from 'react';
+import{ useEffect, useState, useCallback } from 'react';
 import DataTable from '../components/reusable/DataTable';
-import ConfirmationModal from '../components/reusable/ConfirmationModal'; 
-import { fetchBooks, deleteBookCopy, updateBook } from '../services/bookService';
+import ConfirmationModal from '../components/reusable/ConfirmationModal';
+import FormModal from '../components/reusable/FormModal'; 
+import { useToast } from '../hooks/useToast'; 
+import { getBooks, searchBooks, deleteBookCopy, updateBook, addNewBook } from '../services/bookService'; 
 
-const BookManagement = () => {
+  const BookManagement = () => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState(null);
-  
-  // State for Modal Management
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalData, setModalData] = useState(null); // Holds the copy to be deleted
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [editBookData, setEditBookData] = useState(null);
 
-  // Refactor fetchBooks function to use the new service
-  const loadBooks = async (query = '') => {
+  // Search States (Debounced)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  // Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalData, setModalData] = useState(null); 
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [editBookData, setEditBookData] = useState(null); 
+
+  const { showToast } = useToast(); 
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 500); // Wait 500ms
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // --- LOAD BOOKS (Logic Split: Search vs Get All) ---
+  const loadBooks = useCallback(async (query = '') => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchBooks(query);
-      setBooks(data); 
+      // CONDITIONAL: Use searchBooks if query exists, otherwise getBooks
+      const data = query 
+        ? await searchBooks(query) 
+        : await getBooks();
+      
+   const normalizedData = data.map(book => ({
+  ...book,
+  bookId: book.book_id || book.bookId,
+  authorName: book.author_name || book.authorName || book.author, 
+  publicationYear: book.publication_year || book.publicationYear || book.published_year,
+  copyId: book.sample_copy_id || book.copy_id || book.copyId, 
+  availableCount: Number(book.available_copies || book.availableCount || 0),
+  totalCopies: Number(book.total_copies || book.totalCopies || 1)
+}));
+      setBooks(normalizedData);
     } catch (err) {
-      setError('Failed to fetch catalog data.');
+      setError('Failed to fetch catalog data. Check API connection.');
+      showToast({ message: 'Failed to fetch catalog data.', type: 'error' });
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
+  // Trigger load when DEBOUNCED query changes
   useEffect(() => {
-    loadBooks(searchQuery);
-  }, [searchQuery]);
+    loadBooks(debouncedQuery);
+  }, [debouncedQuery, loadBooks]);
 
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
   
-  const handleEditClick = (book) => {
-    //  Critical: Pass the necessary data for the form, including the bookId
+
+  const handleAddBookClick = () => {
     setEditBookData({
-      bookId: book.bookId, 
-      title: book.title,
-      authorName: book.authorName,
-      publicationYear: book.publicationYear 
-     
+      isNew: true, //Flag for creation
+      title: '',
+      authorName: '',
+      publicationYear: new Date().getFullYear().toString(),
     });
     setIsFormModalOpen(true);
   };
 
 
   const handleDeleteClick = (book) => {
-    // The plan requires a specific warning if deleting the last copy.
     let message = `Are you sure you want to delete the copy of "${book.title}"?`;
     let title = 'Confirm Copy Deletion';
     let isDestructive = false;
 
-    if (book.totalCopies === 1) {
-      //  SPECIAL WARNING: Cascading Deletion
+    if (book.totalCopies <= 1) { 
       message = (
         <p>
           <span className="font-bold text-red-600">WARNING: </span>
-          {/* Exact message required by the plan */}
           Deleting this copy will also permanently remove the <span className="font-semibold">Book Title</span> and <span className="font-semibold">Author records</span> as it is the last copy. Are you sure?
         </p>
       );
@@ -71,7 +97,7 @@ const BookManagement = () => {
     }
 
     setModalData({
-      copyId: book.copyId, 
+      copyId: book.copyId,
       title,
       message,
       isDestructive
@@ -84,39 +110,79 @@ const BookManagement = () => {
     setLoading(true);
     try {
       await deleteBookCopy(modalData.copyId);
-      // Success: Clear the error and refresh the table
+      showToast({ message: `Book copy deleted successfully!`, type: 'success' });
       setError(null); 
- 
-      loadBooks(searchQuery); 
+      loadBooks(debouncedQuery); 
     } catch (err) {
-      // Handle API error during deletion
-      setError('Error deleting copy. It may be currently loaned out or an API issue occurred.');
-      setLoading(false);
-      console.error(err);
-    }
-  };
-  const handleFormSubmit = async (formData) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Extract the ID and the data payload
-      const { bookId, ...updatePayload } = formData;
-      
-      // Call the Smart Update API
-      await updateBook(bookId, updatePayload); 
-      
-      // Success: Refresh the table data and show success message
-      // just reload the data, for now
-      loadBooks(searchQuery); 
-      alert('Book metadata updated successfully!');
-    } catch (err) {
-      setError('Failed to update book metadata. Please check the data and try again.');
-      console.error(err);
+      const errMsg = err.response?.data?.message || 'Error deleting copy.';
+      showToast({ message: errMsg, type: 'error' });
+      setError(errMsg);
       setLoading(false);
     }
   };
 
   
+  const handleEditClick = (book) => {
+    setEditBookData({
+      bookId: book.bookId, 
+      copyId: book.copyId, 
+      title: book.title,
+      authorName: book.authorName,
+      publicationYear: book.publicationYear 
+    });
+    setIsFormModalOpen(true);
+  };
+
+ const handleFormSubmit = async (formData) => {
+    setIsFormModalOpen(false);
+    setLoading(true);
+    setError(null);
+    
+    // Read 'isNew' from state
+    const isNew = editBookData.isNew;
+    const bookId = formData.bookId;
+
+    try {
+        if (isNew) {
+            // CREATE (POST)
+            // Backend 'saveBooks' expects: { title, author, published_year }
+            const addPayload = {
+                title: formData.title,
+                author: formData.authorName, // 'saveBooks' looks for 'author'
+                published_year: formData.publicationYear // 'saveBooks' looks for 'published_year'
+            };
+
+            await addNewBook(addPayload);
+            showToast({ message: 'New Book added successfully!', type: 'success' });
+        } else {
+            // UPDATE (PUT)
+            // Backend 'updateBooks' expects: { title, author_name, published_year }
+            const updatePayload = {
+                title: formData.title,
+                // Update uses 'author_name', Add uses 'author'. 
+                // We must match the backend's variable name exactly.
+                author_name: formData.authorName,          
+                
+                //   Must match DB column name 'published_year' 
+                // or the SQL UPDATE statement will fail.
+                published_year: formData.publicationYear 
+            };
+            
+            await updateBook(bookId, updatePayload); 
+            showToast({ message: 'Book metadata updated successfully!', type: 'success' });
+        }
+        
+        loadBooks(debouncedQuery); 
+    } catch (err) {
+        const action = isNew ? 'add new book' : 'update book metadata';
+        const errMsg = err.response?.data?.message || `Failed to ${action}. Check API or data.`;
+        showToast({ message: errMsg, type: 'error' });
+        setError(errMsg);
+        setLoading(false);
+        console.error(err);
+    }
+  };
+
   const columns = [
     { header: 'Title', key: 'title' },
     { header: 'Author', key: 'authorName' },
@@ -125,20 +191,18 @@ const BookManagement = () => {
       header: 'Available Copies', 
       key: 'availableCount',
       render: (row) => (
-        <span 
-          className={`font-semibold ${row.availableCount > 0 ? 'text-green-600' : 'text-red-600'}`}
-        >
+        <span className={`font-semibold ${row.availableCount > 0 ? 'text-green-600' : 'text-red-600'}`}>
           {row.availableCount} / {row.totalCopies}
         </span>
       )
     },
-   { 
+    { 
       header: 'Actions', 
       key: 'actions',
       render: (row) => (
         <div className="flex space-x-2">
             <button 
-              onClick={() => handleEditClick(row)} 
+              onClick={() => handleEditClick(row)}
               className="text-indigo-600 hover:text-indigo-900 text-xs font-medium"
             >
               View/Edit
@@ -156,15 +220,11 @@ const BookManagement = () => {
     },
   ];
 
-  if (loading && books.length === 0) {
-    return <div className="text-center p-10 text-indigo-700">Loading Catalog...</div>;
-  }
-  
   return (
     <div>
-      <h2 className="text-3xl font-extrabold text-gray-900 mb-6">Catalog Management</h2>
+      <h2 className="text-3xl font-extrabold text-gray-900 mb-6">Book Management</h2>
       
-      {/* Search Bar */}
+      {/* Search Bar always visible */}
       <div className="mb-6 flex space-x-4">
         <input
           type="text"
@@ -173,19 +233,27 @@ const BookManagement = () => {
           onChange={handleSearchChange}
           className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
         />
-        <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Add New Book/Copy</button> {/* Placeholder for next step */}
+        <button 
+            onClick={handleAddBookClick}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+            Add New Book
+        </button> 
       </div>
 
       {error && <div className="text-red-600 bg-red-50 p-4 rounded-lg mb-4">{error}</div>}
       
-      {/* Book Table */}
-      <DataTable 
-        data={books} 
-        columns={columns} 
-        title="Books"
-      />
+      {/* Conditional Loading for Table Only */}
+      {loading && books.length === 0 ? (
+        <div className="text-center p-10 text-indigo-700">Loading Catalog...</div>
+      ) : (
+        <DataTable 
+            data={books} 
+            columns={columns} 
+            title="Books"
+        />
+      )}
       
-      {/* Confirmation Modal */}
       {modalData && (
         <ConfirmationModal
           isOpen={isModalOpen}
@@ -197,22 +265,32 @@ const BookManagement = () => {
           isDestructive={modalData.isDestructive}
         />
       )}
-   {isFormModalOpen && editBookData && (
+      
+      {isFormModalOpen && editBookData && (
         <FormModal
-          key={editBookData.bookId} 
-          
+          key={editBookData.bookId || 'new'}
           isOpen={isFormModalOpen}
           onClose={() => setIsFormModalOpen(false)}
           onSubmit={handleFormSubmit}
-          title="Edit Book Metadata"
+          title={editBookData.isNew ? "Add New Book" : "Edit Book Metadata"}
           initialData={editBookData}
           fields={[
-
-          ]}
+            //CONDITIONAL FIELD: Only show bookId if NOT adding new
+            !editBookData.isNew && { 
+                name: 'bookId', 
+                label: 'Book ID (Read-only)', 
+                type: 'text', 
+                readOnly: true 
+            },
+            { name: 'title', label: 'Title', type: 'text', required: true },
+            { name: 'authorName', label: 'Author Name', type: 'text', required: true },
+            { name: 'publicationYear', label: 'Publication Year', type: 'number' },
+          ].filter(Boolean)}
         />
       )}
     </div>
   );
 };
 
-export default BookManagement;
+export default BookManagement; 
+
