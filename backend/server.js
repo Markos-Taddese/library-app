@@ -1,4 +1,5 @@
 const express=require('express')
+const cors=require('cors')
 // Load environment variables first
 require('dotenv').config();
 // Require the database connection utility
@@ -8,6 +9,7 @@ console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
 const port=3000
 const app=express()
 const {notFoundHandler,centralErrorHandler}=require('./middleware/errorHandler')
+app.use(cors({origin:'http://localhost:5173'}))
 // --- MIDDLEWARE SETUP ---
 // Enable Express to parse incoming JSON request bodies
 app.use(express.json())

@@ -222,7 +222,7 @@ try{
   const{search}=req.query
 //we only have one subsequent query to build and dont need 1=1
 //still use 1=1 for future proof, if we ever gonna have any more sunsequent query to build
-  let query='SELECT * FROM members where 1=1 AND  is_deleted = FALSE'
+  let query='SELECT * FROM members where 1=1 AND is_deleted = FALSE '
   let params=[]
   // Add condition to search both name fields using LIKE.
   if(search){

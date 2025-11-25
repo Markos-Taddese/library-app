@@ -3,17 +3,21 @@ async function getBooks(req,res,next){
   try{ 
     //left join for cases like thers book title but no physical copy is recorded
     //counted both physical copies and available out of those copies 
-    const [result]= await db.query(`SELECT b.book_id, b.title, a.author_name as author,
-                                    b.published_year, count (bc.copy_id) AS total_copies,
-                                    COUNT(CASE WHEN bc.status = 'available' THEN 1 END) AS available_copies
-                                    FROM books b
-                                    INNER JOIN authors a on b.author_id=a.author_id
-                                    LEFT JOIN  book_copies bc on b.book_id=bc.book_id
-                                    GROUP BY 
-                                    b.book_id, b.title, b.published_year, a.author_name
-                                    ORDER BY 
-                                    b.title ASC;
-                                    `)
+    const [result]= await db.query(`SELECT 
+  b.book_id, 
+  b.title, 
+  a.author_name as author,
+  b.published_year, 
+  COUNT(bc.copy_id) AS total_copies,
+  COUNT(CASE WHEN bc.status = 'available' THEN 1 END) AS available_copies,
+  -- Add this: get first available copy_id for deletion
+  MIN(CASE WHEN bc.status = 'available' THEN bc.copy_id END) AS sample_copy_id
+FROM books b
+INNER JOIN authors a on b.author_id=a.author_id
+LEFT JOIN book_copies bc on b.book_id=bc.book_id
+GROUP BY b.book_id, b.title, b.published_year, a.author_name
+ORDER BY b.title ASC;
+ `)
        // Return 200 status. The results array is wrapped in an object 
         // with the 'books' key for consistent API structure.
     if (result.length === 0) {
@@ -339,47 +343,51 @@ return next(err)
       }
     }
 }
-async function searchBooks(req, res,next) {
-try{  
-  const { search, available } = req.query;
- // Initialize the base query. 'WHERE 1=1' allows for easy, conditional addition 
-        // of subsequent 'AND' clauses without complex initial checks.
-  let query = `SELECT b.book_id,b.title, a.author_name,b.title,b.published_year 
-                     FROM books b
-                     INNER JOIN authors a ON b.author_id = a.author_id
-                      WHERE 1=1`;
-  let params = [];
-  //filter for title and/or author
-  if (search) {
-    query += ' AND (b.title LIKE ? OR a.author_name LIKE ?)';
-    params.push(`%${search}%`, `%${search}%`);
-  }
-  //filter for availabilty
-  if (available) {
-    query += `AND EXISTS 
-    (
-    SELECT 1 FROM book_copies bc
-   WHERE bc.book_id = b.book_id AND bc.status = ?
-   )` ;
-   params.push('available')
-  }
-  const [results] = await db.query(query, params);
-  if (results.length === 0) {
-    return res.status(200).json({
+async function searchBooks(req, res, next) {
+  try {  
+    const { search, available } = req.query;
+    
+    // FIX: Add sample_copy_id to search results
+    let query = `SELECT b.book_id, b.title, a.author_name, b.published_year,
+                        COUNT(bc.copy_id) AS total_copies,
+                        COUNT(CASE WHEN bc.status = 'available' THEN 1 END) AS available_copies,
+                        MIN(CASE WHEN bc.status = 'available' THEN bc.copy_id ELSE NULL END) AS sample_copy_id
+                 FROM books b
+                 INNER JOIN authors a ON b.author_id = a.author_id
+                 LEFT JOIN book_copies bc ON b.book_id = bc.book_id
+                 WHERE 1=1`;
+    
+    let params = [];
+    
+    if (search) {
+      query += ' AND (b.title LIKE ? OR a.author_name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    
+    query += ` GROUP BY b.book_id, b.title, b.published_year, a.author_name`;
+    
+    if (available) {
+      query += ` HAVING available_copies > 0`;
+    }
+    
+    const [results] = await db.query(query, params);
+    
+    if (results.length === 0) {
+      return res.status(200).json({
         success: true,
         message: 'No books matched your search criteria.',
         books: []
-    });
-}
+      });
+    }
+    
     res.json({
-      success:true,
-    count: results.length, // Added count for clarity
-    books: results
+      success: true,
+      count: results.length,
+      books: results
     });
   }
-  catch(error){
-    //internal error
-  next(error)
+  catch(error) {
+    next(error)
   }
 }
 

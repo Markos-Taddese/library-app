@@ -80,17 +80,17 @@ if(connection){
 async function getActiveLoans(req,res,next){
   //look for active loans by fetching data where specifically return_date is null
  try{
-  const [loans]=await db.query(`SELECT l.member_id, 
-                           CONCAT(m.first_name," ",m.last_name) as member_name,
-                           CASE WHEN m.is_deleted = TRUE THEN 'Banned' ELSE 'Active' END AS member_status,
-                           b.title,a.author_name AS author,l.loan_date, l.return_date,l.due_date
-                           FROM loans l
-                           INNER JOIN members m on l.member_id=m.member_id
-                           INNER JOIN book_copies bc on l.copy_id=bc.copy_id
-                           INNER JOIN books b on b.book_id=bc.book_id
-                           INNER JOIN authors a on a.author_id=b.author_id
-                           WHERE l.return_date IS NULL
-                           ORDER BY l.loan_date DESC`)
+  const [loans]=await db.query(`SELECT l.loan_id, l.member_id, 
+                       CONCAT(m.first_name," ",m.last_name) as member_name,
+                       CASE WHEN m.is_deleted = TRUE THEN 'Banned' ELSE 'Active' END AS member_status,
+                       b.title, a.author_name AS author, l.loan_date, l.return_date, l.due_date
+                       FROM loans l
+                       INNER JOIN members m on l.member_id=m.member_id
+                       INNER JOIN book_copies bc on l.copy_id=bc.copy_id
+                       INNER JOIN books b on b.book_id=bc.book_id
+                       INNER JOIN authors a on a.author_id=b.author_id
+                       WHERE l.return_date IS NULL
+                       ORDER BY l.loan_date DESC`)
 // Ensure 200 OK is returned when no loans are found, 
  // avoiding a 500 error and providing a clear success message.
  if(loans.length===0){
@@ -291,12 +291,12 @@ async function getMembersWithOverdues(req,res,next){
 try {    
 // Query: Join loans, members, and books to count overdue loans per member.
   const[overduemembers]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name) AS members,
-                                        COUNT(l.loan_id) AS overdues,m.email
+                                        COUNT(l.loan_id) AS overdues,m.email,m.phone_number
                                         FROM loans l
                                         INNER JOIN members m ON l.member_id=m.member_id
                                         WHERE return_date IS NULL 
                                         AND l.due_date<CURRENT_DATE()
-                                        GROUP BY  m.member_id,members
+                                        GROUP BY  m.member_id,members,m.phone_number
                                         ORDER BY overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
 if(overduemembers.length===0){
