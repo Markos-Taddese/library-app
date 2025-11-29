@@ -1,4 +1,4 @@
-import apiClient from './apiClient'; 
+import apiClient from './apiClient';
 
 const extractMemberArray = (response) => {
     if (response.data && Array.isArray(response.data.members)) {
@@ -30,4 +30,8 @@ export const updateMember = async (memberId, data) => {
 export const addMember = async (data) => {
     const response = await apiClient.post('/members', data); 
     return response.data;
+};
+export const getMemberLoanHistory = async (memberId) => {
+    const response = await apiClient.get(`/loans/history/member/${memberId}`);
+    return response.data.history || [];
 };

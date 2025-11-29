@@ -1,9 +1,17 @@
-import { useEffect, useState, useCallback } from 'react'; 
+import{ useEffect, useState, useCallback } from 'react'; 
 import DataTable from '../components/reusable/DataTable';
 import ConfirmationModal from '../components/reusable/ConfirmationModal';
 import FormModal from '../components/reusable/FormModal'; 
+import HistoryModal from '../components/reusable/HistoryModal';
 import { useToast } from '../hooks/useToast'; 
-import { getMembers, deactivateMember, searchMembers, updateMember, addMember } from '../services/memberService'; 
+import { 
+    getMembers, 
+    deactivateMember, 
+    searchMembers, 
+    updateMember, 
+    addMember,
+    getMemberLoanHistory
+} from '../services/memberService'; 
 
 const MemberManagement = () => {
   const [members, setMembers] = useState([]);
@@ -14,17 +22,23 @@ const MemberManagement = () => {
   const [searchQuery, setSearchQuery] = useState(''); 
   const [debouncedQuery, setDebouncedQuery] = useState(''); 
 
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalData, setModalData] = useState(null); 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editMemberData, setEditMemberData] = useState(null); 
+  
+  // History Modal States
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [currentHistory, setCurrentHistory] = useState([]);
+  const [historyMemberName, setHistoryMemberName] = useState('');
 
   const { showToast } = useToast(); 
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 500); // Wait 500ms after typing stops
-
+    }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -39,14 +53,13 @@ const MemberManagement = () => {
       const normalizedData = data.map(member => ({
         ...member,
         name: `${member.first_name} ${member.last_name}`,
-        joinDate: new Date(member.join_date).toLocaleDateString(),
         memberId: member.member_id || member.memberId,
         phone_number: member.phone_number, 
       }));
       
       setMembers(normalizedData);
     } catch (err) {
-      setError('Failed to fetch member data. Check API connection.');
+      setError('Failed to fetch member data.');
       showToast({ message: 'Failed to fetch member data.', type: 'error' });
       console.error(err);
     } finally {
@@ -54,13 +67,12 @@ const MemberManagement = () => {
     }
   }, [showToast]); 
 
-  // Fetch when DEBOUNCED query changes
   useEffect(() => {
     loadMembers(debouncedQuery);
   }, [loadMembers, debouncedQuery]); 
   
   const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value); 
+    setSearchQuery(e.target.value);
   };
   const handleAddMemberClick = () => {
     setEditMemberData({
@@ -72,7 +84,22 @@ const MemberManagement = () => {
     });
     setIsFormModalOpen(true);
   };
+  
 
+  const handleViewHistory = async (member) => {
+      try {
+          setLoading(true); 
+          const historyData = await getMemberLoanHistory(member.memberId);
+          setCurrentHistory(historyData);
+          setHistoryMemberName(member.name);
+          setIsHistoryModalOpen(true);
+      } catch (err) {
+          showToast({ message: 'Failed to fetch loan history.', type: 'error' });
+          console.error(err)
+      } finally {
+          setLoading(false);
+      }
+  };
   const handleDeleteClick = (member) => {
     setModalData({
       memberId: member.memberId, 
@@ -100,7 +127,7 @@ const MemberManagement = () => {
     }
   };
 
-  
+
   const handleEditClick = (member) => {
     setEditMemberData({
       memberId: member.memberId,
@@ -111,6 +138,7 @@ const MemberManagement = () => {
     });
     setIsFormModalOpen(true);
   };
+
 
   const handleFormSubmit = async (formData) => {
     setIsFormModalOpen(false);
@@ -149,14 +177,31 @@ const MemberManagement = () => {
     { header: 'ID', key: 'memberId' }, 
     { header: 'Name', key: 'name' },
     { header: 'Email', key: 'email' },
-    { header: 'Joined Date', key: 'joinDate' },
+      { header: 'Phone', key: 'phone_number' },
     { 
       header: 'Actions', 
       key: 'actions',
       render: (row) => (
         <div className="flex space-x-2">
-            <button onClick={() => handleEditClick(row)} className="text-indigo-600 hover:text-indigo-900 text-xs font-medium">View/Edit</button>
-            <button onClick={() => handleDeleteClick(row)} className="text-red-600 hover:text-red-900 text-xs font-medium">Deactivate</button>
+            <button 
+                onClick={() => handleViewHistory(row)} 
+                className="text-green-600 hover:text-green-900 text-xs font-medium"
+                title="View Loan History"
+            >
+                History
+            </button>
+            <button 
+                onClick={() => handleEditClick(row)}
+                className="text-indigo-600 hover:text-indigo-900 text-xs font-medium"
+            >
+                Edit
+            </button>
+            <button 
+                onClick={() => handleDeleteClick(row)} 
+                className="text-red-600 hover:text-red-900 text-xs font-medium"
+            >
+                Deactivate
+            </button>
         </div>
       )
     },
@@ -166,7 +211,6 @@ const MemberManagement = () => {
     <div>
       <h2 className="text-3xl font-extrabold text-gray-900 mb-6">Member Management</h2>
       
-      {/*Search Bar is now ALWAYS rendered, so focus is never lost */}
       <div className="mb-6 flex space-x-4">
         <input
           type="text"
@@ -182,7 +226,6 @@ const MemberManagement = () => {
 
       {error && <div className="text-red-600 bg-red-50 p-4 rounded-lg mb-4">{error}</div>}
       
-      {/* CONDITIONAL LOADING: Only the table area shows loading */}
       {loading && members.length === 0 ? (
         <div className="text-center p-10 text-indigo-700">Loading Members...</div>
       ) : (
@@ -222,6 +265,14 @@ const MemberManagement = () => {
           ].filter(Boolean)}
         />
       )}
+
+      {/* RENDER HISTORY MODAL */}
+      <HistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        memberName={historyMemberName}
+        history={currentHistory}
+      />
     </div>
   );
 };
