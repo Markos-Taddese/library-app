@@ -22,7 +22,7 @@
 ![Dark Mode Theme](screenshots/dark-mode.png)
 
 ### Modals
-![Modals] (screenshots/modal.png)
+![Modals](screenshots/modals.png)
 
 
 ## Key Features of the System
