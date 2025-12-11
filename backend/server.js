@@ -6,10 +6,10 @@ require('dotenv').config();
 //the server starts running only when database is connected
 const db=require('./config/database')
 console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
-const port=3000
+const port=process.env.PORT || 3000;
 const app=express()
 const {notFoundHandler,centralErrorHandler}=require('./middleware/errorHandler')
-app.use(cors({origin:'http://localhost:5173'}))
+app.use(cors())
 // --- MIDDLEWARE SETUP ---
 // Enable Express to parse incoming JSON request bodies
 app.use(express.json())
