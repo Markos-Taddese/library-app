@@ -9,7 +9,15 @@ console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
 const port=process.env.PORT || 3000;
 const app=express()
 const {notFoundHandler,centralErrorHandler}=require('./middleware/errorHandler')
-app.use(cors())
+const allowedOrigins = [
+    'http://localhost:5173', 
+    'https://library-app-tau-ruddy.vercel.app/'
+];
+app.use(cors({
+    origin: allowedOrigins, 
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'], 
+    credentials: true,
+}));
 // --- MIDDLEWARE SETUP ---
 // Enable Express to parse incoming JSON request bodies
 app.use(express.json())
