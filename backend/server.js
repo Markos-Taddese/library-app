@@ -2,9 +2,7 @@ const express=require('express')
 const cors=require('cors')
 // Load environment variables first
 require('dotenv').config();
-// Require the database connection utility
-//the server starts running only when database is connected
-const db=require('./config/database')
+
 console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
 const port=process.env.PORT || 3000;
 const app=express()
@@ -49,4 +47,7 @@ try{
                process.exit(1)
       }
 }
+// Require the database connection utility
+//the server starts running only when database is connected
+const db=require('./config/database')
 startServer();
