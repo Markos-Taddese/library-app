@@ -11,7 +11,7 @@ const app=express()
 const {notFoundHandler,centralErrorHandler}=require('./middleware/errorHandler')
 const allowedOrigins = [
     'http://localhost:5173', 
-    'https://library-app-tau-ruddy.vercel.app/'
+    'https://library-app-tau-ruddy.vercel.app'
 ];
 app.use(cors({
     origin: allowedOrigins, 
