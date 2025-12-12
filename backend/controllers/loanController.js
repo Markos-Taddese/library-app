@@ -295,7 +295,7 @@ try {
                                         FROM loans l
                                         INNER JOIN members m ON l.member_id=m.member_id
                                         WHERE return_date IS NULL 
-                                        AND l.due_date<DATE(NOW())
+                                        AND DATEDIFF(l.due_date, NOW()) < 0
                                         GROUP BY  m.member_id,members,m.phone_number
                                         ORDER BY overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
