@@ -290,17 +290,20 @@ try{
 async function getMembersWithOverdues(req,res,next){
 try {    
 // Query: Join loans, members, and books to count overdue loans per member.
-  const[overduemembers]=await db.query(`SELECT l.member_id, CONCAT(m.first_name," ",m.last_name) AS members,
-                                        COUNT(l.loan_id) AS overdues,m.email,m.phone_number
-                                        FROM loans l
-                                        INNER JOIN members m ON l.member_id=m.member_id
-                                        WHERE return_date IS NULL 
-                                        AND DATEDIFF(l.due_date, NOW()) < 0
-                                        GROUP BY m.member_id, 
-         CONCAT(m.first_name, " ", m.last_name),
-         m.email, 
-         m.phone_number
-ORDER BY overdues DESC;`)
+  const [overduemembers] = await db.query(`
+  SELECT 
+    ANY_VALUE(l.member_id) as member_id,
+    CONCAT(m.first_name, " ", m.last_name) AS members,
+    COUNT(l.loan_id) AS overdues,
+    ANY_VALUE(m.email) as email,
+    ANY_VALUE(m.phone_number) as phone_number
+  FROM loans l
+  INNER JOIN members m ON l.member_id = m.member_id
+  WHERE l.return_date IS NULL 
+    AND l.due_date < CURDATE()
+  GROUP BY m.member_id, m.first_name, m.last_name
+  ORDER BY overdues DESC
+`);
 //wrapping up the result array in history key, object wrapper
 if(overduemembers.length===0){
     return res.status(200).json({
