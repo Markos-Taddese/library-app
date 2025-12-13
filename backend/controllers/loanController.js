@@ -296,8 +296,11 @@ try {
                                         INNER JOIN members m ON l.member_id=m.member_id
                                         WHERE return_date IS NULL 
                                         AND DATEDIFF(l.due_date, NOW()) < 0
-                                        GROUP BY m.member_id, m.first_name, m.last_name, m.email, m.phone_number
-                                        ORDER BY overdues DESC;`)
+                                        GROUP BY m.member_id, 
+         CONCAT(m.first_name, " ", m.last_name),
+         m.email, 
+         m.phone_number
+ORDER BY overdues DESC;`)
 //wrapping up the result array in history key, object wrapper
 if(overduemembers.length===0){
     return res.status(200).json({
