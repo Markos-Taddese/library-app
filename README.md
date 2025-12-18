@@ -33,7 +33,6 @@
 ![Modals](screenshots/modals.png)
  </details>
 
----
 
 ## Component Documentation
 
@@ -111,4 +110,3 @@ To run the entire system, you must start the API server and the client applicati
         ```
     The client application will typically open at `http://localhost:5173` (or your configured port).
 
----
