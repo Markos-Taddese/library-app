@@ -4,11 +4,18 @@
 
 ---
 
+## LIVE DEMO
+**[View Live Application on Vercel](https://library-app-tau-ruddy.vercel.app/)**
+**Note:** The backend is hosted on a free tier. Please allow **30-60 seconds** for the initial load if the server is sleeping.
+---
+
 ## Application Preview
 
 ### Main Dashboard
 ![Library Dashboard](screenshots/dashboard.png)
 
+<details>
+<summary><b> View More Screenshots (Mobile, Dark Mode, Management)</b></summary>
 ### Book Management
 ![Book Management Interface](screenshots/books.png)
 
@@ -23,6 +30,7 @@
 
 ### Modals
 ![Modals](screenshots/modals.png)
+ </details>
 
 
 ## Key Features of the System
