@@ -6,7 +6,7 @@
 
 ## LIVE DEMO
 **[View Live Application on Vercel](https://library-app-tau-ruddy.vercel.app/)**
-**Note:** The backend is hosted on a free tier. Please allow **30-60 seconds** for the initial load if the server is sleeping.
+> **Note:** The backend is hosted on a free tier. Please allow **30-60 seconds** for the initial load if the server is sleeping.
 ---
 
 ## Application Preview
@@ -15,7 +15,8 @@
 ![Library Dashboard](screenshots/dashboard.png)
 
 <details>
-<summary><b> View More Screenshots (Mobile, Dark Mode, Management)</b></summary>
+<summary><b>View More Screenshots (Mobile, Dark Mode, Management)</b></summary>
+
 ### Book Management
 ![Book Management Interface](screenshots/books.png)
 
@@ -32,6 +33,16 @@
 ![Modals](screenshots/modals.png)
  </details>
 
+---
+
+## Component Documentation
+
+This project includes dedicated README files for each module to provide further information on the specific logic, implementation, and features of the system:
+
+* **[Backend API: Deep Dive & Endpoints](./backend/README.md)**
+* **[Frontend Client: Architecture & Usage](./frontend/README.md)**
+
+---
 
 ## Key Features of the System
 
@@ -99,14 +110,5 @@ To run the entire system, you must start the API server and the client applicati
         npm run dev  // Adjust this command based on your actual script (e.g., npm start)
         ```
     The client application will typically open at `http://localhost:5173` (or your configured port).
-
----
-
-## Component Documentation
-
-For detailed information on a specific part of the system, please refer to its dedicated documentation:
-
-* **[Backend API: Deep Dive & Endpoints](./backend/README.md)**
-* **[Frontend Client: Architecture & Usage](./frontend/README.md)**
 
 ---
