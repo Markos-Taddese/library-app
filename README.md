@@ -99,14 +99,15 @@ To run the entire system, you must start the API server and the client applicati
 
 4.  **Start the Frontend Client**
     * Open a **new terminal window** and navigate to the frontend directory: `cd frontend/`
-    *  Create a **`.env`** file in this `frontend/` directory to define the API root:
-    ```env
-   VITE_API_BASE_URL=http://localhost:3000
-    ```
+    * Create a **`.env`** file in this `frontend/` directory to define the API root:
+        ```env
+        VITE_API_BASE_URL=http://localhost:3000
+        ```
     * Install dependencies and start the client:
         ```bash
         npm install
-        npm run dev  // Adjust this command based on your actual script (e.g., npm start)
+        npm run dev //Adjust this command based on your actual script (e.g., npm start)
         ```
     The client application will typically open at `http://localhost:5173` (or your configured port).
 
+---
