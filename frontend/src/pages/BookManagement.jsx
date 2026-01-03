@@ -254,7 +254,7 @@ className="text-red-600 hover:text-red-900 text-xs font-medium"
 
  return (
 <div>
- <h2 className="text-3xl font-extrabold text-gray-900 mb-6">Book Management</h2>
+ <h2 className="text-3xl font-extrabold dark:text-white text-gray-900 mb-6">Book Management</h2>
 
  {/* Search Bar always visible */}
  <div className="mb-6 flex space-x-4">

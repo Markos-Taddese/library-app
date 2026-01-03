@@ -117,58 +117,102 @@ const Dashboard = () => {
           colorClass={overdueMembers.length > 0 ? "border-red-600 ring-4 ring-red-100 dark:ring-red-900" : "border-gray-300 dark:border-gray-600"} 
         />
       </div>
+{/* Dedicated Section for Overdue Action List */}
+<div className="mt-12 bg-white dark:bg-gray-800 shadow-xl rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
+  
+  {/* Section Header */}
+  <div 
+    className={`p-6 border-b ${
+      overdueMembers.length > 0 
+        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200' 
+        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200'
+    }`}>
+    <h3 className="text-2xl font-bold"> 
+      {overdueMembers.length > 0 
+        ? `⚠️ ${overdueMembers.length} Members Require Follow-up` 
+        : 'No Overdue Members.'}
+    </h3>
+  </div>
 
-      {/* Dedicated Section for Overdue Action List */}
-      <div className="mt-12 bg-white dark:bg-gray-800 shadow-xl rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
-        
-        {/* Section Header */}
-        <div 
-          className={`p-6 border-b ${
-            overdueMembers.length > 0 
-              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200' 
-              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200'
-          }`}>
-          <h3 className="text-2xl font-bold"> 
-            {overdueMembers.length > 0 
-              ? `⚠️ ${overdueMembers.length} Members Require Follow-up` 
-              : 'No Overdue Members.'}
-          </h3>
-        </div>
-
-        {/* Table */}
-        {overdueMembers.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Member Name</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Phone Number</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-4 text-center text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Overdue Count</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-red-100 dark:divide-red-900/30">
-                {overdueMembers.map((member) => (
-                  <tr key={member.member_id} className="hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">{member.members}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{member.phone_number || 'No phone'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{member.email || 'No email'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-md font-extrabold text-red-700 dark:text-red-400">{member.overdues}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        
-        {/* Empty State */}
-        {overdueMembers.length === 0 && (
-          <div className="p-10 text-center bg-white dark:bg-gray-800">
-            <p className="text-xl text-green-600 dark:text-green-400 font-semibold mb-2">Success!</p>
-            <p className="text-gray-600 dark:text-gray-400">The system indicates all borrowed items are accounted for and not past their due date.</p>
-          </div>
-        )}
+  {/* Desktop Table - hidden on mobile */}
+  {overdueMembers.length > 0 && (
+    <>
+      <div className="hidden lg:block overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Member Name</th>
+              <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Phone Number</th>
+              <th className="px-6 py-4 text-left text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Email</th>
+              <th className="px-6 py-4 text-center text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wider">Overdue Count</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-red-100 dark:divide-red-900/30">
+            {overdueMembers.map((member) => (
+              <tr key={member.member_id} className="hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer transition-colors">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">{member.members}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{member.phone_number || 'No phone'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{member.email || 'No email'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-center text-md font-extrabold text-red-700 dark:text-red-400">{member.overdues}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {/* Mobile Cards - shown on mobile */}
+      <div className="lg:hidden">
+        {overdueMembers.map((member) => (
+          <div 
+            key={member.member_id}
+            className="border-b border-red-100 dark:border-red-900/30 last:border-b-0 p-4 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
+          >
+            <div className="flex justify-between items-start mb-3">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Member Name:
+              </span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white text-right">
+                {member.members}
+              </span>
+            </div>
+            <div className="flex justify-between items-start mb-3">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Phone Number:
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 text-right">
+                {member.phone_number || 'No phone'}
+              </span>
+            </div>
+            <div className="flex justify-between items-start mb-3">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Email:
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 text-right">
+                {member.email || 'No email'}
+              </span>
+            </div>
+            <div className="flex justify-between items-start">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Overdue Count:
+              </span>
+              <span className="text-sm font-extrabold text-red-700 dark:text-red-400 text-right">
+                {member.overdues}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+  
+  {/* Empty State */}
+  {overdueMembers.length === 0 && (
+    <div className="p-10 text-center bg-white dark:bg-gray-800">
+      <p className="text-xl text-green-600 dark:text-green-400 font-semibold mb-2">Success!</p>
+      <p className="text-gray-600 dark:text-gray-400">The system indicates all borrowed items are accounted for and not past their due date.</p>
+    </div>
+  )}
+</div>
     </div>
   );
 };

@@ -279,7 +279,7 @@ useEffect(() => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-extrabold text-gray-900">Loan Management</h2>
+        <h2 className="text-3xl font-extrabold dark:text-white text-gray-900">Loan Management</h2>
         <div className="flex space-x-4">
           {/* Tab Navigation */}
           <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">

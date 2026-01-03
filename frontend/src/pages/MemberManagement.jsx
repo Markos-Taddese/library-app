@@ -209,7 +209,7 @@ const MemberManagement = () => {
 
   return (
     <div>
-      <h2 className="text-3xl font-extrabold text-gray-900 mb-6">Member Management</h2>
+      <h2 className="text-3xl font-extrabold dark:text-white text-gray-900 mb-6">Member Management</h2>
       
       <div className="mb-6 flex space-x-4">
         <input

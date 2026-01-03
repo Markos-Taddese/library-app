@@ -106,7 +106,7 @@ To run the entire system, you must start the API server and the client applicati
     * Install dependencies and start the client:
         ```bash
         npm install
-        npm run dev //Adjust this command based on your actual script (e.g., npm start)
+        npm run dev // Adjust this command based on your actual script (e.g., npm start)
         ```
     The client application will typically open at `http://localhost:5173` (or your configured port).
 
