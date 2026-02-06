@@ -1,39 +1,5 @@
 const db=require('../config/database')
-async function getBooks(req,res,next){
-  try{ 
-    //left join for cases like thers book title but no physical copy is recorded
-    //counted both physical copies and available out of those copies 
-    const [result]= await db.query(`SELECT 
-  b.book_id, 
-  b.title, 
-  a.author_name AS author,
-  b.published_year, 
-  COUNT(bc.copy_id) AS total_copies,
-  COUNT(CASE WHEN bc.status = 'available' THEN 1 END) AS available_copies,
-  -- Add this: get first available copy_id for deletion
-  MIN(CASE WHEN bc.status = 'available' THEN bc.copy_id END) AS sample_copy_id
-FROM books b
-INNER JOIN authors a on b.author_id=a.author_id
-LEFT JOIN book_copies bc on b.book_id=bc.book_id
-GROUP BY b.book_id, b.title, b.published_year, a.author_name
-ORDER BY b.title ASC;
-                                    `)
-       // Return 200 status. The results array is wrapped in an object 
-        // with the 'books' key for consistent API structure.
-    if (result.length === 0) {
-            return res.status(200).json({
-                success: true,
-                message: 'No books have been added yet.',
-                books: []
-            });
-        }
-       res.status(200).json({
-        success:true,
-        books:result});}
-    catch(error){
-       next(error)
-    }
-}
+
 async function saveBooks(req,res,next){
   let connection;
 try{    
@@ -369,7 +335,7 @@ async function searchBooks(req, res, next) {
     if (available) {
       query += ` HAVING available_copies > 0`;
     }
-    
+    query += ` ORDER BY b.title ASC`;
     const [results] = await db.query(query, params);
     
     if (results.length === 0) {
@@ -413,7 +379,6 @@ next(error);
 
 module.exports= {
   getDetailBook,
-  getBooks,
   saveBooks,
   deleteBooks,
   updateBooks,

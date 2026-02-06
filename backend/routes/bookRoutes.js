@@ -1,7 +1,6 @@
 const express=require('express')
 //import the handler functions from the bookController
 const {
-       getBooks,
        saveBooks,
        deleteBooks,
        searchBooks,
@@ -12,7 +11,6 @@ const {
 const route=express.Router()
 // These routes are mounted onto a base URL (/books) in server.js to form the final API endpoints.
 route.post('/',saveBooks)
-route.get('/all',getBooks)
 route.get('/search',searchBooks)
 route.get('/stats',getBookStats)
 route.get('/:id',getDetailBook)

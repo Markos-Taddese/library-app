@@ -9,13 +9,13 @@ const extractBookArray = (response) => {
     }
     return [];
 };
-export const getBooks = async () => {
-  const response = await apiClient.get('/books/all');
-  return extractBookArray(response);
-};
-
-export const searchBooks = async (query) => {
-  const response = await apiClient.get(`/books/search?search=${encodeURIComponent(query)}`);
+export const searchBooks = async (query,available = false) => {
+  let url = `/books/search?search=${encodeURIComponent(query)}`;
+  // only add 'available' parameter when checkbox is checked
+  // when unchecked: don't send parameter → backend sees undefined → false
+  // when checked: send 'available=true' → backend sees string "true" → truthy
+  if(available) url +='&available=true';
+  const response= await apiClient.get(url)
   return extractBookArray(response);
 };
 
@@ -34,5 +34,7 @@ export const addNewBook = async (data) => {
 };
 export const getBookLoanHistory = async (bookId) => {
 const response = await apiClient.get(`/loans/history/book/${bookId}`);
-    return response.data.history || [];
+const history=response.data.history
+//do manual array checking since extaract array function is never used here
+    return Array.isArray(history)?history : [];
 };

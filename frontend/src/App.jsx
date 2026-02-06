@@ -12,7 +12,7 @@ function App() {
         <Route path="/" element={<MainLayout />}>
           {/* Main Navigation Areas */}
           <Route index element={<Dashboard />} />
-          <Route path="book" element={<BookManagement />} />
+          <Route path="books" element={<BookManagement />} />
           <Route path="loans" element={<LoanManagement />} />
           <Route path="members" element={<MemberManagement />} />
         </Route>

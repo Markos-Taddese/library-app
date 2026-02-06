@@ -4,9 +4,7 @@ import ConfirmationModal from '../components/reusable/ConfirmationModal';
 import FormModal from '../components/reusable/FormModal'; 
 import HistoryModal from '../components/reusable/HistoryModal';
 import { useToast } from '../hooks/useToast'; 
-
 import { 
-    getBooks, 
     searchBooks, 
     deleteBookCopy, 
     updateBook, 
@@ -31,13 +29,13 @@ import {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [currentHistory, setCurrentHistory] = useState([]);
   const [historyBookTitle, setHistoryBookTitle] = useState('');
+  const [filterAvailableBook,setFilterAvailableBook]=useState(false)
 
-    const { showToast } = useToast(); 
-       useEffect(() => {
-       const timer = setTimeout(() => {
+const { showToast } = useToast(); 
+useEffect(() => {
+    const timer = setTimeout(() => {
         setDebouncedQuery(searchQuery);
         }, 500); // Wait 500ms
-
 return () => clearTimeout(timer);
 }, [searchQuery]);
 
@@ -46,28 +44,28 @@ return () => clearTimeout(timer);
  setError(null);
  try {
  //  Use searchBooks if query exists, otherwise getBooks
- const data = query 
- ? await searchBooks(query) 
-: await getBooks();
+ const data = await searchBooks(query || '', filterAvailableBook);
 const normalizedData = data.map(book => ({
  ...book,
  bookId: book.book_id || book.bookId,
  authorName: book.author_name || book.authorName || book.author, 
-publicationYear: book.publication_year || book.publicationYear || book.published_year,
+ publicationYear: book.publication_year || book.publicationYear || book.published_year,
  copyId: book.sample_copy_id || book.copy_id || book.copyId, // 
  availableCount: Number(book.available_copies || book.availableCount || 0),
  totalCopies: Number(book.total_copies || book.totalCopies || 1)
-}));
+}));// defensive code, if the backend varibales names ever changed, and for best practice
 
 setBooks(normalizedData);
  } catch (err) {
-setError('Failed to fetch catalog data. Check API connection.');
- showToast({ message: 'Failed to fetch catalog data.', type: 'error' });
+    const backendErrMsg=err.response?.data?.message;
+    const displayError=backendErrMsg||"Failed to fetch catalog data."
+setError(displayError);
+showToast({ message: displayError, type: 'error' });
 console.error(err);
 } finally {
  setLoading(false);
 }
- }, [showToast]);
+ }, [filterAvailableBook,showToast]);
 
  // Trigger load when DEBOUNCED query changes
  useEffect(() => {
@@ -78,7 +76,7 @@ console.error(err);
  setSearchQuery(e.target.value);
 };
  
- const handleAddBookClick = () => {
+const handleAddBookClick = () => {
  setEditBookData({
 isNew: true, 
 title: '',
@@ -104,7 +102,9 @@ publicationYear: new Date().getFullYear().toString(),
           setHistoryBookTitle(book.title);
           setIsHistoryModalOpen(true);
       } catch (err) {
-          showToast({ message: 'Failed to fetch book loan history.', type: 'error' });
+        const backendErrMsg=err.response?.data?.message;
+        const displayError=backendErrMsg||'Failed to fetch book loan history.'
+          showToast({ message: displayError, type: 'error' });
           console.error(err)
       } finally {
           setLoading(false);
@@ -115,7 +115,7 @@ publicationYear: new Date().getFullYear().toString(),
  let title = 'Confirm Copy Deletion';
  let isDestructive = false;
 
- if (book.totalCopies <= 1) { 
+ if (book.totalCopies <= 1) {
  message = (
  <p>
  <span className="font-bold text-red-600">WARNING: </span>
@@ -144,9 +144,10 @@ const handleConfirmDelete = async () => {
  setError(null); 
  loadBooks(debouncedQuery); 
 } catch (err) {
- const errMsg = err.response?.data?.message || 'Error deleting copy.';
- showToast({ message: errMsg, type: 'error' });
-setError(errMsg);
+ const backendErrMsg = err.response?.data?.message;
+ const displayError=backendErrMsg || 'Error deleting copy.'
+ showToast({ message: displayError, type: 'error' });
+setError(displayError);
 setLoading(false);
  }
  };
@@ -154,7 +155,7 @@ setLoading(false);
  const handleEditClick = (book) => {
  setEditBookData({
  bookId: book.bookId, 
- copyId: book.copyId, 
+ copyId: book.copyId, // not necessary for current update system
  title: book.title,
  authorName: book.authorName,
  publicationYear: book.publicationYear 
@@ -180,7 +181,7 @@ title: formData.title,
 };
 
  await addNewBook(addPayload);
-showToast({ message: 'New Book added successfully!', type: 'success' });
+ showToast({ message: 'New Book added successfully!', type: 'success' });
  } else {
  const updatePayload = {
  title: formData.title,
@@ -199,15 +200,16 @@ published_year: formData.publicationYear
  loadBooks(debouncedQuery); 
  } catch (err) {
  const action = isNew ? 'add new book' : 'update book metadata';
- const errMsg = err.response?.data?.message || `Failed to ${action}. Check API or data.`;
-showToast({ message: errMsg, type: 'error' });
- setError(errMsg);
+ const backendErrMsg = err.response?.data?.message;
+ const displayError=backendErrMsg || `Failed to ${action}. Check API or data.`
+showToast({ message: displayError, type: 'error' });
+ setError(displayError);
  setLoading(false);
  console.error(err);
  }
  };
 
- const columns = [
+const columns = [
 { header: 'Title', key: 'title' },
 { header: 'Author', key: 'authorName' },
 { header: 'Year', key: 'publicationYear' },
@@ -265,6 +267,14 @@ className="text-red-600 hover:text-red-900 text-xs font-medium"
 onChange={handleSearchChange}
  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
 />
+<label className="flex items-center space-x-2">
+  <input 
+    type="checkbox" 
+    checked={filterAvailableBook} 
+    onChange={(e) => setFilterAvailableBook(e.target.checked)} 
+  />
+ <span>Show only available</span>
+</label>
  <button 
  onClick={handleAddBookClick}
  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"

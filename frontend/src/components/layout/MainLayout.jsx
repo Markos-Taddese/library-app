@@ -4,7 +4,7 @@ import DarkModeToggle from '../reusable/DarkModeToggle';
 
 const navItems = [
   { name: 'Dashboard', path: '/' },
-  { name: 'Book Management', path: '/book' },
+  { name: 'Book Management', path: '/books' },
   { name: 'Loan Management', path: '/loans' },
   { name: 'Member Management', path: '/members' },
 ];

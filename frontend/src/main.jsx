@@ -8,12 +8,12 @@ import { DarkModeProvider } from './context/DarkModeContext';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
-      <ToastProvider>
+    <ToastProvider>
         <DarkModeProvider>
+          <BrowserRouter>
           <App />
+          </BrowserRouter>
         </DarkModeProvider>
       </ToastProvider>
-    </BrowserRouter>
   </StrictMode>,
 )
