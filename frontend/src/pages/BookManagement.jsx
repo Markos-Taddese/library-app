@@ -258,30 +258,38 @@ className="text-red-600 hover:text-red-900 text-xs font-medium"
 <div>
  <h2 className="text-3xl font-extrabold dark:text-white text-gray-900 mb-6">Book Management</h2>
 
- {/* Search Bar always visible */}
- <div className="mb-6 flex space-x-4">
-<input
- type="text"
- placeholder="Search by Title or Author..."
- value={searchQuery}
-onChange={handleSearchChange}
- className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-/>
-<label className="flex items-center space-x-2">
-  <input 
-    type="checkbox" 
-    checked={filterAvailableBook} 
-    onChange={(e) => setFilterAvailableBook(e.target.checked)} 
+{/* Search Bar always visible */}
+<div className="mb-6 flex flex-col sm:flex-row gap-4">
+  {/* Search input - full width on mobile, flex-1 on desktop */}
+  <input
+    type="text"
+    placeholder="Search by Title or Author..."
+    value={searchQuery}
+    onChange={handleSearchChange}
+    className="w-full sm:flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
   />
- <span>Show only available</span>
-</label>
- <button 
- onClick={handleAddBookClick}
- className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
- >
- Add New Book
- </button> 
- </div>
+  
+  <div className="flex flex-wrap items-center gap-4">
+    {/* Filter checkbox - keeps label visible */}
+    <label className="flex items-center space-x-2 flex-shrink-0">
+      <input 
+        type="checkbox" 
+        checked={filterAvailableBook} 
+        onChange={(e) => setFilterAvailableBook(e.target.checked)}
+        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+      />
+      <span className="dark:text-white whitespace-nowrap">Available only</span>
+    </label>
+    
+    {/* Add button - full width on mobile, auto width on desktop */}
+    <button 
+      onClick={handleAddBookClick}
+      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 w-full sm:w-auto flex-shrink-0"
+    >
+      Add New Book
+    </button>
+  </div>
+</div>
 
  {error && <div className="text-red-600 bg-red-50 p-4 rounded-lg mb-4">{error}</div>}
 

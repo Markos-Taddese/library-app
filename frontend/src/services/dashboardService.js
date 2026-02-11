@@ -3,51 +3,51 @@ export const getBookStats = async () => {
   try {
     const response = await apiClient.get('/books/stats');
     const backendData = response.data;
-    
-    return { 
-        totalUniqueBooks: backendData.total_unique_books || 0,
-        totalAvailableCopies: backendData.total_available_copies || 0,
+   return { 
+        totalUniqueBooks: backendData.total_unique_books ,
+        totalAvailableCopies: backendData.total_available_copies ,
     };
   } catch (error) {
     console.error('Error fetching book stats:', error);
-    // Return default zeros if API fails
-    return { totalUniqueBooks: 0, totalAvailableCopies: 0 };
+    return null; //return null instead of fallback '0' to handel error propery
   }
 };
 export const getActiveLoanCount = async () => {
   try {
     const response = await apiClient.get('/loans/active');
-    const loans = response.data.active_loans || [];
-    return loans.length;
+    return response.data.active_loans.length ;// relying on backend data entirely and remove the fallback
   } catch (error) {
     console.error('Error fetching loan count:', error);
-    return 0;
+    return null;
   }
 };
 export const getMemberCount = async () => {
   try {
     const response = await apiClient.get('/members/stats');
-    return response.data.total_active_members || 0;
+    return response.data.total_active_members;
   } catch (error) {
     console.error('Error fetching member stats:', error);
-    return 0;
+    return null;
   }
 };
 export const getOverdueMembers = async () => {
   try {
     const response = await apiClient.get('/loans/overdue/members');
-    return response.data.history || [];
+    return response.data.history;
+    
   } catch (error) {
     console.error('Error fetching overdue members:', error);
-    return [];
+    //retrun null instead of empty array to handle error properly 
+    //instead of showing a success even when erro happens
+    return null; 
   }
 };
 export const getOverdueLoansCount = async () => {
   try {
     const response = await apiClient.get('/loans/overdue');
-    return response.data.count || 0;
+    return response.data.count;
   } catch (error) {
     console.error('Error fetching overdue count:', error);
-    return 0;
+    return null;
   }
 };
