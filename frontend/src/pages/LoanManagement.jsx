@@ -1,64 +1,14 @@
 import{ useEffect, useState, useCallback } from 'react';
 import DataTable from '../components/reusable/DataTable';
 import ConfirmationModal from '../components/reusable/ConfirmationModal';
+import FormModal from '../components/reusable/FormModal';
 import { useToast } from '../hooks/useToast'; 
 import { getActiveLoans, returnLoan, renewLoan, createLoan,getOverdueLoans } from '../services/loanService';
 
-const CreateLoanModal = ({ isOpen, onClose, onSubmit }) => {
-  const [formData, setFormData] = useState({ memberId: '', copyId: '' });
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm p-6">
-        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Borrow Book</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Member ID</label>
-            <input 
-              type="text" required 
-              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-              value={formData.memberId} 
-              onChange={e => setFormData({...formData, memberId: e.target.value})} 
-              placeholder="e.g. 1"
-            />
-          </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Book Copy ID</label>
-            <input 
-              type="text" required 
-              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-              value={formData.copyId} 
-              onChange={e => setFormData({...formData, copyId: e.target.value})} 
-              placeholder="e.g. 5"
-            />
-          </div>
-          <div className="flex justify-end space-x-3">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors duration-150"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="px-4 py-2 text-white bg-green-600 rounded-lg shadow-md hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 transition-colors duration-150"
-            >
-              Confirm Loan
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
+const loanFields = [
+  { name: 'memberId', label: 'Member ID', type: 'text', required: true, placeholder: 'e.g. 1' },
+  { name: 'copyId', label: 'Book Copy ID', type: 'text', required: true, placeholder: 'e.g. 5' }
+];
 
 // --- MAIN COMPONENT ---
 const LoanManagement = () => {
@@ -70,13 +20,13 @@ const LoanManagement = () => {
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [modalData, setModalData] = useState(null); 
 
   const { showToast } = useToast();
 
 
-  const fetchActiveLoans = useCallback(async () => {
+  const fetchActiveLoans = useCallback(async (isSilent=false) => {
     setLoading(true);
     setError(null);
     try {
@@ -94,15 +44,21 @@ const LoanManagement = () => {
 
       setActiveLoans(normalizedData);
     } catch (err) {
-      setError('Failed to fetch active loans. Check API connection.');
+      if(!isSilent){
+  setError('Failed to fetch active loans. Check API connection.');
       showToast({ message: 'Failed to fetch active loans.', type: 'error' });
-      console.error(err);
+      console.error('Error fetching active loans:', err);
+      }
+      throw err
+    
     } finally {
       setLoading(false);
     }
   }, [showToast]);
   //  Fetch Overdue Loans
-  const fetchOverdueLoans = useCallback(async () => {
+  const fetchOverdueLoans = useCallback(async (isSilent=false) => {
+     setLoading(true);
+    setError(null);
   try {
     const data = await getOverdueLoans();
     
@@ -118,33 +74,48 @@ const LoanManagement = () => {
     }));
     setOverdueLoans(normalizedData);
   } catch (err) {
-    console.error('Error fetching overdue loans:', err);
+ if(!isSilent)   {
+      console.error('Error fetching overdue loans:', err);
     showToast({ message: 'Failed to fetch overdue loans.', type: 'error' });
+    setError('Error fetching overdue loans')}
+    throw err
+  }
+  finally{
+    setLoading(false)
   }
 }, [showToast]);
-useEffect(() => {
-  fetchActiveLoans();
-  fetchOverdueLoans(); 
-}, [fetchActiveLoans, fetchOverdueLoans]);
+
   // Load data based on active tab
   useEffect(() => {
     if (activeTab === 'active') {
-      fetchActiveLoans();
+     fetchActiveLoans().catch(() => {});
     } else if (activeTab === 'overdue') {
-      fetchOverdueLoans();
+      fetchOverdueLoans().catch(()=>{});
     }
   }, [activeTab, fetchActiveLoans, fetchOverdueLoans]);
   const handleCreateLoanSubmit = async (formData) => {
-    setIsCreateModalOpen(false);
+    setIsFormModalOpen(false);
     setLoading(true);
     try {
         await createLoan(formData.memberId, formData.copyId);
         showToast({ message: 'Loan created successfully!', type: 'success' });
-        fetchActiveLoans(); // Refresh active loans
+        setError(null);
+    try {
+      await fetchActiveLoans(true); 
+    } catch (fetchErr) {
+      // This catch runs only if fetchActiveLoans throws (it will, even in silent mode)
+      setError("Loan created successfully, but failed to refresh the list. Please reload.");
+      showToast({ message: "Refresh failed. Data might be stale.", type: 'warning' });
+      console.error(fetchErr)
+    }
+    
     } catch (err) {
         const msg = err.response?.data?.message || 'Failed to create loan. Check IDs.';
         showToast({ message: msg, type: 'error' });
-        setLoading(false);
+        setError(msg);
+       }
+    finally{
+       setLoading(false);
     }
   };
 
@@ -179,21 +150,28 @@ useEffect(() => {
       await renewLoan(loanId);
       showToast({ message: `Successfully renewed loan for: ${bookTitle}`, type: 'success' });
     }
-    
     setError(null);
-    // Refresh the appropriate list based on current tab
+    try{  // Refresh the appropriate list based on current tab
     if (activeTab === 'active') {
-      await fetchActiveLoans();
+      await fetchActiveLoans(true);
     } else {
-      await fetchOverdueLoans(); 
+      await fetchOverdueLoans(true); 
+    }}
+    catch (fetchErr) {
+      // If we are here, the RETURN worked, but the REFRESH failed.
+      setError("Action succeeded, but failed to refresh the list. Please reload.");
+      showToast({ message: "Refresh failed. Data might be stale.", type: 'warning' });
+       console.error(fetchErr)
     }
-  } catch (err) {
-    const msg = err.response?.data?.message || `Loan ${action} failed. Check status or API.`;
-    setError(msg); 
-    showToast({ message: msg, type: 'error' });
+  } catch (actionErr) {
+    //  This only runs if the RETURN/RENEW itself failed
+    setError(`Loan ${action} failed. Check status or API.`); 
+    showToast({ message: `Loan ${action} failed.`, type: 'error' });
+    console.error(actionErr)
   } finally { //ensures loading always stops
     setLoading(false);
   }
+
 };
 
   // Table Columns for Active Loans
@@ -208,7 +186,7 @@ useEffect(() => {
       render: (row) => {
         const isOverdue = new Date(row.rawDueDate) < new Date();
         return (
-          <span className={`font-medium ${isOverdue ? 'text-red-600 font-bold' : 'text-gray-900'}`}>
+          <span className={`font-medium ${isOverdue ? 'text-red-600 font-bold ' : 'text-gray-900 dark:text-gray-300'}`}>
             {row.dueDate} {isOverdue ? ' (OVERDUE)' : ''}
           </span>
         );
@@ -228,6 +206,8 @@ useEffect(() => {
             <button 
               onClick={() => handleActionClick(row, 'renew')}
               className="px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 transition"
+                disabled={new Date(row.rawDueDate) < new Date()}
+  title={new Date(row.rawDueDate) < new Date() ? "Cannot renew - overdue" : "Renew Loan"}
             >
               Renew
             </button>
@@ -266,8 +246,8 @@ useEffect(() => {
             <button 
               onClick={() => handleActionClick(row, 'renew')}
               className="px-3 py-1 bg-orange-600 text-white rounded-md text-xs font-medium hover:bg-orange-700 transition"
-              disabled={row.daysOverdue > 30} // disable renew if too overdue
-              title={row.daysOverdue > 30 ? "Cannot renew - too overdue" : "Renew Loan"}
+              disabled={row.daysOverdue > 0} // disable renew if too overdue
+              title={row.daysOverdue > 0 ? "Cannot renew - overdue" : "Renew Loan"}
             >
               Renew
             </button>
@@ -306,7 +286,7 @@ useEffect(() => {
           </div>
           
           <button 
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => setIsFormModalOpen(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 shadow-md transition"
           >
             + Borrow Book
@@ -350,11 +330,13 @@ useEffect(() => {
         />
       )}
 
-      <CreateLoanModal 
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSubmit={handleCreateLoanSubmit}
-      />
+      <FormModal
+  isOpen={isFormModalOpen}
+  onClose={() => setIsFormModalOpen(false)}
+  onSubmit={handleCreateLoanSubmit}
+  title="Borrow Book"
+  fields={loanFields}
+/>
     </div>
   );
 };
