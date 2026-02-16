@@ -52,7 +52,7 @@ This client requires the Backend API to be running on `http://localhost:3000`.
 2.  **API Configuration:**
     Create a **`.env`** file in this `frontend/` directory to define the API root:
     ```env
-   VITE_API_BASE_URL=http://localhost:3000
+    VITE_API_BASE_URL=http://localhost:3000
     ```
 3.  **Start Development Server:**
     ```bash
