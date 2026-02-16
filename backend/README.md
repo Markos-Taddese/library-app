@@ -7,8 +7,8 @@
 ## Key Features
 
 * **Fully Normalized Database:** Uses a Third Normal Form (3NF) MySQL schema, ensuring data integrity by separating Titles, Copies, and Loans.
-* **Normalized Catelog Design:** The Book Controller manages a complex, normalized structure where **book titles** are separated from **physical copies** and **authors**. Retrieving a single book's detail requires multi-table joins (Title, Author, Copies) and aggregation to report accurate, real-time availability.involves complex joins and aggregation to report accurate availability across all copies.
-* **Transaction-Safe Loan Management:** Critical operations (`createLoans`, `returnLoan`,`renwalLoan`) are wrapped in **database transactions** with connection locking (`FOR UPDATE`) to prevent race conditions.
+* **Normalized Catalog Design:** The Book Controller manages a complex, normalized structure where **book titles** are separated from **physical copies** and **authors**. Retrieving a single book's detail requires multi-table joins (Title, Author, Copies) and aggregation to report accurate, real-time availability across all copies.
+* **Transaction-Safe Loan Management:** Critical operations (`createLoans`, `returnLoan`,`renewLoan`) are wrapped in **database transactions** with connection locking (`FOR UPDATE`) to prevent race conditions.
 * **Cascading Deletion Logic:** The Book DELETE endpoint performs a smart, conditional, cascading cleanup (copy deletion $\rightarrow$ book title removal $\rightarrow$ author removal) to prevent orphaned records.
 * **Comprehensive Reporting:** Includes advanced endpoints for fetching active loans, overdue items, and aggregate reports.
 * **Efficient Member Management:** The Member Controller provides custom search functionality and serves as the crucial validation source for all new loans.
@@ -90,8 +90,7 @@ All paths listed below start after the server address (e.g., `http://localhost:3
 | Controller | Method | Endpoint | Description |
 | :--- | :--- | :--- | :--- |
 | **Books** | `POST` | `/books/` | Add a new book title and its first copy, OR adds a copy to an existing title (smart insert). |
-| **Books** | `GET` | `/books/all` | Retrieve all book titles,authors and their copy status. |
-| **Books** | `GET` | `/books/search` | **Search the catalog** by title and/or author using the `?search=` query parameter. Can optionally filter to only show available books using `?available=true`. |
+| **Books** | `GET` | `/books/search` | **Search the catalog** by title and/or author using the `?search=` query parameter. If no `search` parameter is provided, returns **all books**. Can optionally filter to only show available books using `?available=true`. |
 | **Books** | `GET` | `/books/stats` | Retrieve statistics for total unique book and totl available copies. |
 | **Books** | `PUT` | `/books/:id` | **Update a book title's metadata by its `book_id`**. Supports updating the title, year and `author_name`. If the author changes, the old author record is **transactionally removed** if no other books are linked to them. |
 | **Books** | `GET` | `/books/:id` | Retrieve details for a specific book title. |
