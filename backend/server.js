@@ -26,10 +26,12 @@ app.get('/', (req, res) => {
 const bookroutes=require('./routes/bookRoutes')
 const memberRoutes=require('./routes/memberRoutes')
 const loanRoutes=require('./routes/loanRoutes')
+const authRoutes=require('./routes/authRoutes')
 // Mount the imported routers to specific base paths
 app.use('/books', bookroutes);
 app.use('/members',memberRoutes);
 app.use('/loans',loanRoutes);
+app.use('/auth',authRoutes)
 app.use(notFoundHandler);
 app.use(centralErrorHandler);
 async function startServer(){
