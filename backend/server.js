@@ -2,7 +2,7 @@ const express=require('express')
 const cors=require('cors')
 // Load environment variables first
 require('dotenv').config();
-
+const { authToken, protect } = require('./middleware/authToken');
 console.log('--- Environment Check Active. Mode:', process.env.NODE_ENV, '---');
 const port=process.env.PORT || 3000;
 const app=express()
@@ -16,6 +16,7 @@ app.use(cors({
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'], 
     credentials: true,
 }));
+
 // --- MIDDLEWARE SETUP ---
 // Enable Express to parse incoming JSON request bodies
 app.use(express.json())
@@ -23,14 +24,16 @@ app.use(express.json())
 app.get('/', (req, res) => {
     res.status(200).json({ message: "Library API is running successfully!" });
 });
+
 const bookroutes=require('./routes/bookRoutes')
 const memberRoutes=require('./routes/memberRoutes')
 const loanRoutes=require('./routes/loanRoutes')
 const authRoutes=require('./routes/authRoutes')
+
 // Mount the imported routers to specific base paths
-app.use('/books', bookroutes);
-app.use('/members',memberRoutes);
-app.use('/loans',loanRoutes);
+app.use('/books', authToken,protect, bookroutes);
+app.use('/members',authToken,protect,memberRoutes);
+app.use('/loans',authToken,protect,loanRoutes);
 app.use('/auth',authRoutes)
 app.use(notFoundHandler);
 app.use(centralErrorHandler);
@@ -51,5 +54,6 @@ try{
 }
 // Require the database connection utility
 //the server starts running only when database is connected
-const db=require('./config/database')
+const db=require('./config/database');
+
 startServer();

@@ -1,26 +1,34 @@
-//authentication middlware 
 const jwt=require('jsonwebtoken');
 function authToken(req,res,next){
-try{
-const token=req.headers['authorization']?.split(' ')[1];
+const authHeader=req.headers['authorization'];
+const token=authHeader && authHeader.split(' ')[1];
 if(!token) return res.status(401).json({message:"authorization token not found!!"})
+try{
 const user=jwt.verify(token,process.env.TOKEN_SECRET)
 req.user=user
 next();
 }catch(error){
-    //token is expired or invalid 
-    if(!err.statusCode) return res.status(403).json({message:"invalid token"})
-  return next(error);//pass the error to errorhandler.js
+        const err = new Error('Token expired or invalid');
+          err.statusCode=401;
+   return next(err);
 }
 }
-function isAdmin(req,res,next){
-    //grant access if the role is admin only, for registering users...
-    if(req.user.role!=="admin"){
-       return res.status(403).json({error:"only an admin can do register"})
+const isAdmin=(req,res,next)=>{
+   if (!req.user || req.user.role.toLowerCase() !== "admin"){
+     return   res.status(403).json({error:"Admin access required"})
     }
     next()
 }
+const protect = (req, res, next) => {
+   //if user needs to change their password block them from accessing everything else
+    if (req.user.must_change_password) {
+        return res.status(403).json({ message: "Change password first!" });
+    }
+    //if not let them through
+    next();
+};
 module.exports={
    authToken,
-   isAdmin
+   isAdmin,
+   protect
 }

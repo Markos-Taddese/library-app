@@ -169,7 +169,7 @@ res.status(200).json({ success:true,
 
 async function getMyProfile(req,res,next){
     try{
-        //added must chnage password to get the boolean value in auth context.frontend after refresh
+//added must chnage password to get the boolean value in auth context.frontend after refresh
   const[row]=await db.execute('SELECT user_id, email, role, is_active, must_change_password FROM users WHERE user_id=?', [req.user.id])//user id comes from the middlware
  //check if the user exist and if they are active
  //if we dont check users is_active status, a user might still have a valid token after deactivation
@@ -227,7 +227,8 @@ const [result]=await db.query
     }
   }
     catch(error){
-// Automatically passes DB errors like 'ER_DUP_ENTRY' to the global handler       next(error)
+// Automatically passes DB errors like 'ER_DUP_ENTRY' to the global handler       
+ next(error)
     }
 }
 
@@ -264,6 +265,109 @@ const match = await bcrypt.compare(currentPassword, user.password_hash);
         next(error);
     }
 }
+
+async function deactiveUser(req,res,next){
+    const {id}=req.params;
+    if (!id) {
+          const err=new Error('user ID is required for deletion.')
+          err.statusCode=400;
+          return next(err)
+        }
+    const adminId=req.user.id //from the middlware authtoken
+    //prevent self deactivattion for the admin
+try{    
+    if (String(id) === String(adminId)) {
+            const err = new Error("Self-deactivation is prohibited to prevent system lockout.");
+            err.statusCode = 403; // Forbidden
+            return next(err);
+        }
+    const[user]=await db.execute("SELECT is_active FROM users  WHERE user_id=?",[id])
+    if(user.length===0){
+        const err = new Error(`User with this ID ${id} not found.`);
+   err.statusCode = 404;
+   return next(err);
+    }   
+    const activeUser = user[0];
+ if (activeUser.is_active === 0) {
+    // ID found, but already deactivated. this prevents redundant deactiavtion process
+    const err = new Error(`user with this ID ${id} is already deactivated.`);
+    err.statusCode = 400; 
+    return next(err);
+  }
+  //deactivate and remove sessions
+    await db.execute('UPDATE users SET is_active=0 WHERE user_id=? AND user_id !=?',[id,adminId])
+    await db.execute('DELETE FROM refresh_tokens  WHERE user_id=?',[id]);
+    res.status(200).json({message:"user deactivated and session revoked!"})
+}catch(error){
+    next(error)
+}
+}
+
+async function reactiveUser(req,res,next){
+const {id}=req.params
+if (!id) {
+          const err=new Error('user ID is required for activation.')
+          err.statusCode=400;
+          return next(err)
+        }
+try{
+     const[user]=await db.execute("SELECT is_active FROM users WHERE user_id=? ",[id])
+    if(user.length===0){
+        const err = new Error(`User with this ID ${id} not found.`);
+   err.statusCode = 404;
+   return next(err);
+    }   
+    const activeUser = user[0];
+    //prevent redudant reactivation process
+ if (activeUser.is_active === 1) {
+    const err = new Error(`user with this ID ${id} is active.`);
+    err.statusCode = 400; 
+    return next(err);
+  }
+await db.execute('UPDATE users SET is_active=1 WHERE user_id=?',[id])
+res.status(200).json({message:"User activated succesfully!!"})
+}catch(error){
+    next(error)
+}
+}
+async function searchUser(req, res, next) {
+  try {  
+    const { search, status } = req.query;
+    // Start with a base query that is always true
+    let query = 'SELECT user_id, username, email, role, is_active, created_at FROM users WHERE 1=1';
+    let params = []; 
+    //dynamic search, username or role
+    if (search) {
+      query += ' AND (username LIKE ? OR role LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    //status filter
+  if (status === 'active') {
+            query += ' AND is_active = 1';
+        } else if (status === 'inactive') {
+            query += ' AND is_active = 0';
+        }
+    query += ` ORDER BY created_at ASC`;
+    const [results] = await db.execute(query, params);
+    
+    if (results.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No user matched your search criteria.',
+        users: []
+      });
+    }
+    
+    res.json({
+      success: true,
+      count: results.length,
+      users: results
+    });
+  }
+  catch(error) {
+    next(error)
+    }
+}
 module.exports={
     registerFirstUser,
     registerUser,
@@ -273,4 +377,7 @@ module.exports={
     getMyProfile,
     profileUpdate,
     changePassword,
+    deactiveUser,
+    reactiveUser,
+    searchUser
 }
