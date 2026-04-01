@@ -28,7 +28,6 @@ return res.status(201).json({ success:true,
 }
 
 }
-
 async function loginuser(req,res,next){
 const {username,password}=req.body
     try { 
@@ -147,10 +146,131 @@ return res.status(201).json({ success:true,
 }
 }
 
+async function logoutUser(req,res,next){
+const tokenToDelete=req.body.tokenToDelete
+if(!tokenToDelete){
+    const err=new Error("token not provided for logout")
+    err.statusCode=400
+    return next(err)
+} 
+try{
+const [result]=await db.execute('DELETE FROM refresh_tokens WHERE token = ?',[tokenToDelete]);
+if (result.affectedRows === 0) {
+       const err = new Error("Token not found or already logged out")
+       err.statusCode=404
+            return next(err)
+        }
+res.status(200).json({ success:true,
+    message: "Logged out successfully" });
+} catch(error){
+    next(error)
+}
+}
 
+async function getMyProfile(req,res,next){
+    try{
+        //added must chnage password to get the boolean value in auth context.frontend after refresh
+  const[row]=await db.execute('SELECT user_id, email, role, is_active, must_change_password FROM users WHERE user_id=?', [req.user.id])//user id comes from the middlware
+ //check if the user exist and if they are active
+ //if we dont check users is_active status, a user might still have a valid token after deactivation
+  if(row.length===0 || row[0].is_active===0){ 
+    const err = new Error ("User is Unavailable or deactiveted " )
+    err.statusCode=404
+    return next(err)
+}
+  res.status(200).json(row[0]);
+    } catch(error){
+        next(error)
+    }
+}
+async function profileUpdate(req,res,next){
+try{
+  const id=req.user.id // get the id from middlware, because the user is updating themselves
+const updates=req.body
+//prevent mass assignment by specifying fields to update
+const fieldsToUpdate=['username','email']
+//filter incoming body to let only allowed fileds for an update 
+const filteredKeys= Object.keys(updates).filter(key => fieldsToUpdate.includes(key));
+// exit early if no ID or no valid fields are provided to update
+if (!id || filteredKeys.length === 0) {
+      const err=new Error('User ID and update data are required.')
+      err.statusCode=400;
+      return next(err)
+        }
+        // verify the user exists and is active before trying to update
+  const [[{ count }]] = await db.query(`
+                        SELECT COUNT(*) AS count FROM users 
+                        WHERE user_id = ?  AND is_active = TRUE`, [id]); 
+    if (count === 0) {
+     const err = new Error(`Active User with ID ${id} not found or is deactivated.`);
+      err.statusCode = 404;
+      return next(err);
+                }
+        // Build SET clause dynamically
+const setclause=filteredKeys.map(key=>`${key}=?`).join(',')
+const values=filteredKeys.map(key => updates[key]);
+values.push(id)// push the ID last to match the WHERE clause placeholder
+const [result]=await db.query
+        (`UPDATE users SET ${setclause} WHERE user_id=?`,
+        values )
+    if(result.affectedRows>0){
+      res.status(200).json({
+        success:true,
+        message:"user info updated succesfully"})
+    } 
+    else{
+   // Record existed (checked above), but affectedRows is 0 because nothing changed
+      return res.status(200).json({
+                success: true,
+                message: "Update successful (no new changes were needed)."
+                });
+    }
+  }
+    catch(error){
+// Automatically passes DB errors like 'ER_DUP_ENTRY' to the global handler       next(error)
+    }
+}
+
+async function changePassword(req, res, next) {
+    const { currentPassword, newPassword } = req.body;
+    const id = req.user.id;
+ if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "both current and new passwords are required" });
+    }
+ try {
+  const [rows] = await db.execute('SELECT password_hash FROM users WHERE user_id = ?', [id]);
+   if (rows.length === 0) {
+            return res.status(404).json({ message: 'User with this id not found' });
+        }
+  const user = rows[0];
+  //verify current password
+const match = await bcrypt.compare(currentPassword, user.password_hash);
+ if (!match) {
+   return res.status(401).json({ message: "Incorrect current password" });
+        }
+ //hash new passowrd
+  const newPasswordHash = await bcrypt.hash(newPassword, 10);
+ //flip must_change_password to false so registered users can bypass forced change password(frontend)
+ //for admin the false simply overwrites the false
+  await db.execute(
+    'UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE user_id = ?', 
+  [newPasswordHash, id]
+  );
+// Kill existing sessions for security
+  await db.execute("DELETE FROM refresh_tokens WHERE user_id = ?", [id]);
+ res.status(200).json({ message: "Password updated successfully. Please log in again." });
+ } 
+ catch (error) {
+        next(error);
+    }
+}
 module.exports={
     registerFirstUser,
     registerUser,
     loginuser,
     refreshToken,
+    logoutUser,
+    getMyProfile,
+    profileUpdate,
+    changePassword,
 }
