@@ -43,7 +43,7 @@ try{
     // If the refresh call fails (401), we clear everything
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    throw error; // Let the interceptor catch 
+    throw error; // Let the interceptor catch this to trigger logout
   }
   }, 
   changePassword : async (credentials) => {

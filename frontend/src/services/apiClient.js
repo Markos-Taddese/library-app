@@ -79,13 +79,15 @@ failedQueue.push({resolve, reject}); // actually join the queue and wait for pro
         //refresh failed, kill the queue
         processQueue(err,null);
         reject(err);
+        window.dispatchEvent(new Event('auth-error'));// send this dispath event for ui to logout
       }
     ).finally(() => {
             isRefresh = false; // Unlock the gate, for later requests
           });
 })
     }
-throw error
+throw error//if the error isnt 401 juts return the error norammly
+  
   }
 );
 
