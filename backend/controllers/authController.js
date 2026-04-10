@@ -28,6 +28,16 @@ return res.status(201).json({ success:true,
 }
 
 }
+//to let the frontend to know if the database is empty,
+//  to trigger a Setup admin page for registering the first user
+async function checkSystemSetup(req, res, next) {
+  try {
+    const [[{ count }]] = await db.execute('SELECT COUNT(*) AS count FROM users');
+    res.json({ needsSetup: count === 0 });
+  } catch (error) {
+    next(error);
+  }
+}
 async function loginuser(req,res,next){
 const {username,password}=req.body
     try { 
@@ -235,33 +245,51 @@ const [result]=await db.query
 async function changePassword(req, res, next) {
     const { currentPassword, newPassword } = req.body;
     const id = req.user.id;
- if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: "both current and new passwords are required" });
+try {
+    const [rows] = await db.execute(
+        'SELECT password_hash, must_change_password FROM users WHERE user_id = ?',
+            [id]
+        );
+    if (rows.length === 0) {
+            const err = new Error('User not found');
+            err.statusCode = 404;
+            return next(err);
     }
- try {
-  const [rows] = await db.execute('SELECT password_hash FROM users WHERE user_id = ?', [id]);
-   if (rows.length === 0) {
-            return res.status(404).json({ message: 'User with this id not found' });
+    const user = rows[0];
+        // Path A: Regular User (Must verify old password)
+        if (user.must_change_password === 0) {
+            if (!currentPassword || !newPassword) {
+                const err = new Error("Current and new passwords are required");
+                err.statusCode = 400;
+                return next(err);
+            }
+     const match = await bcrypt.compare(currentPassword, user.password_hash);
+            if (!match) {
+                const err = new Error("Incorrect current password");
+                err.statusCode = 401;
+                return next(err);
+            }
+        } 
+// Path B: Forced Change (Only needs new password)
+        else if (!newPassword) {
+            const err = new Error("New password is required");
+            err.statusCode = 400;
+            return next(err);
         }
-  const user = rows[0];
-  //verify current password
-const match = await bcrypt.compare(currentPassword, user.password_hash);
- if (!match) {
-   return res.status(401).json({ message: "Incorrect current password" });
-        }
- //hash new passowrd
-  const newPasswordHash = await bcrypt.hash(newPassword, 10);
- //flip must_change_password to false so registered users can bypass forced change password(frontend)
- //for admin the false simply overwrites the false
-  await db.execute(
-    'UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE user_id = ?', 
-  [newPasswordHash, id]
-  );
-// Kill existing sessions for security
+// 1. Hash and Update
+        const newPasswordHash = await bcrypt.hash(newPassword, 10);
+        await db.execute(
+            'UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE user_id = ?',
+            [newPasswordHash, id]
+        );
+// 2. delete all existing sessions
   await db.execute("DELETE FROM refresh_tokens WHERE user_id = ?", [id]);
- res.status(200).json({ message: "Password updated successfully. Please log in again." });
- } 
- catch (error) {
+ // 3. Response
+ const message = user.must_change_password === 0 
+            ? "Password updated. Please log in again." 
+            : "Password set successfully.";
+res.status(200).json(message);
+ } catch (error) {
         next(error);
     }
 }
@@ -370,6 +398,7 @@ async function searchUser(req, res, next) {
 }
 module.exports={
     registerFirstUser,
+    checkSystemSetup,
     registerUser,
     loginuser,
     refreshToken,
