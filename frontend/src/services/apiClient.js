@@ -35,6 +35,9 @@ apiClient.interceptors.response.use(
   (response) => response, 
   async (error) => {
     const originalRequest = error.config;
+    if (originalRequest.url.includes('/auth/login')) {
+      return Promise.reject(error); // Send the "Invalid Password" error straight to the UI
+    }
     if (error.response?.status === 401 && !originalRequest._retry) {
 //check if localstorage is already updated with new token, before proceeding to the nextstep
       const latestToken = localStorage.getItem('accessToken');

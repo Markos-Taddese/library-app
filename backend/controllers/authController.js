@@ -59,6 +59,7 @@ const userPayload ={
     name: users.username,
     id:users.user_id,
     role:users.role,
+    email:users.email,//useful in user profile
     must_change_password:Boolean(users.must_change_password) //better reading for frontend
 }
 const accessToken=jwt.sign(userPayload, process.env.TOKEN_SECRET,{expiresIn:'1m'})
@@ -67,7 +68,7 @@ console.log(userPayload)
 await db.execute("INSERT INTO refresh_tokens (user_id,token,expires_at) VALUES (?,?,DATE_ADD(NOW(),INTERVAL 14 DAY))",[userPayload.id, refreshByte])
 
 res.json({ success:true,
-    message: userPayload.must_change_password ? "Password change required" : "Successfully Logged in!",
+      message: userPayload.must_change_password ? "Password change required" : "Successfully Logged in!",
       user: userPayload,
       accessToken: accessToken,
       refreshToken: refreshByte }) // sending response object so the frontend can access user payload without having jwt decoded
@@ -180,7 +181,7 @@ res.status(200).json({ success:true,
 async function getMyProfile(req,res,next){
     try{
 //added must chnage password to get the boolean value in auth context.frontend after refresh
-  const[row]=await db.execute('SELECT user_id, email, role, is_active, must_change_password FROM users WHERE user_id=?', [req.user.id])//user id comes from the middlware
+  const[row]=await db.execute('SELECT username, user_id, email, role, is_active, must_change_password FROM users WHERE user_id=?', [req.user.id])//user id comes from the middlware
  //check if the user exist and if they are active
  //if we dont check users is_active status, a user might still have a valid token after deactivation
   if(row.length===0 || row[0].is_active===0){ 
@@ -243,54 +244,85 @@ const [result]=await db.query
 }
 
 async function changePassword(req, res, next) {
-    const { currentPassword, newPassword } = req.body;
-    const id = req.user.id;
-try {
-    const [rows] = await db.execute(
-        'SELECT password_hash, must_change_password FROM users WHERE user_id = ?',
-            [id]
-        );
-    if (rows.length === 0) {
+const { currentPassword, newPassword, confirmPassword } = req.body;
+const id = req.user.id;
+    try {
+    // Validation
+    if (newPassword !== confirmPassword) {
+      const err = new Error("Passwords do not match");
+       err.statusCode = 400;
+       return next(err);
+    }
+const [rows] = await db.execute(
+    'SELECT user_id, username, email, role, password_hash, must_change_password FROM users WHERE user_id = ?',
+    [id]);
+if (rows.length === 0) {
             const err = new Error('User not found');
             err.statusCode = 404;
             return next(err);
+        }
+const user = rows[0];
+//  Logic Paths
+if (user.must_change_password === 0) {
+   if (!currentPassword || !newPassword) {
+    const err = new Error("Current and new passwords are required");
+    err.statusCode = 400;
+    return next(err);
     }
-    const user = rows[0];
-        // Path A: Regular User (Must verify old password)
-        if (user.must_change_password === 0) {
-            if (!currentPassword || !newPassword) {
-                const err = new Error("Current and new passwords are required");
-                err.statusCode = 400;
-                return next(err);
-            }
-     const match = await bcrypt.compare(currentPassword, user.password_hash);
-            if (!match) {
-                const err = new Error("Incorrect current password");
-                err.statusCode = 401;
-                return next(err);
-            }
-        } 
-// Path B: Forced Change (Only needs new password)
-        else if (!newPassword) {
+
+const match = await bcrypt.compare(currentPassword, user.password_hash);
+ if (!match) {
+    const err = new Error("Incorrect current password");
+    err.statusCode = 401;
+    return next(err);
+    }
+        } else if (!newPassword) {
             const err = new Error("New password is required");
             err.statusCode = 400;
             return next(err);
         }
-// 1. Hash and Update
-        const newPasswordHash = await bcrypt.hash(newPassword, 10);
-        await db.execute(
-            'UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE user_id = ?',
-            [newPasswordHash, id]
-        );
-// 2. delete all existing sessions
+
+//Hash and Update Database
+const newPasswordHash = await bcrypt.hash(newPassword, 10);
+await db.execute(
+    'UPDATE users SET password_hash = ?, must_change_password = 0 WHERE user_id = ?',
+  [newPasswordHash, id]);
+if(user.must_change_password===1){
+    // ISSUE NEW SESSION:
+    // Since JWTs are stateless, the user's current token still says 'must_change_password: true'.
+    // so Create a payload that reflects the NEW state (0 or false)
+ const userPayload = {
+    name: user.username, 
+    id: id,
+    role: user.role,
+    email:user.email,//useful in user profile
+    must_change_password: false // Hardcode to false because its just got changed.
+};
+const accessToken=jwt.sign(userPayload, process.env.TOKEN_SECRET,{expiresIn:'1m'})
+const refreshByte=crypto.randomBytes(40).toString('hex');
+console.log(userPayload)
+await db.query("INSERT INTO refresh_tokens (user_id,token,expires_at) VALUES (?,?,DATE_ADD(NOW(),INTERVAL 14 DAY))",[userPayload.id, refreshByte])
+
+// Send it all to the frontend
+ return res.json({ 
+    success: true,
+    message: "Password changed successfully",
+    user: userPayload,
+    accessToken: accessToken,
+    refreshToken: refreshByte 
+});
+} else{
+// Kill existing sessions for security
   await db.execute("DELETE FROM refresh_tokens WHERE user_id = ?", [id]);
- // 3. Response
- const message = user.must_change_password === 0 
-            ? "Password updated. Please log in again." 
-            : "Password set successfully.";
-res.status(200).json(message);
- } catch (error) {
-        next(error);
+        return res.json({ 
+        success: true, 
+        requiresRelogin: true, // Signal for the frontend
+        message: "Password changed successfully. For security, please log in again." 
+    });
+ }
+}
+ catch (error) {
+    next(error);
     }
 }
 

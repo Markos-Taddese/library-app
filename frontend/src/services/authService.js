@@ -46,9 +46,13 @@ try{
     throw error; // Let the interceptor catch this to trigger logout
   }
   }, 
-  changePassword : async (credentials) => {
+changePassword: async (credentials) => {
     const response = await apiClient.put('/auth/update/password', credentials);
-    return response.data;
+    if (response.data.accessToken) {
+        localStorage.setItem('accessToken', response.data.accessToken);
+        localStorage.setItem('refreshToken', response.data.refreshToken);
+    }
+  return response.data; // Return the full data object
 },
  profileUpdate : async (data) => {
     const response = await apiClient.put(`/auth/update`, data);
@@ -76,5 +80,9 @@ reactiveUser: async(userId)=>{
   const response=await apiClient.get(`/auth/reactive/${userId}`)
   return response.data
 },
+checkSystemSetup: async()=>{
+  const response = await apiClient.get('/auth/check-setup');
+  return response.data
+}
   };
 export default authService;

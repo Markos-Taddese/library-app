@@ -44,8 +44,9 @@ verifySession();
     const userData=data.user
     setUser(userData);
     return data; //for must change password redirect
-  } catch(error){
-console.error(error)
+  } catch(err){
+console.log( err);
+    throw err;
   }
   };
    useEffect(() => {
