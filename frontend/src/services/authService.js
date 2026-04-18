@@ -73,11 +73,11 @@ searchUser: async (query, status = '') => {
   return response.data.users || [];
 },
 deactiveUser: async(userId)=>{
-  const response=await apiClient.get(`/auth/deactivate/${userId}`)
+  const response=await apiClient.patch(`/auth/deactivate/${userId}`)
   return response.data
 },
 reactiveUser: async(userId)=>{
-  const response=await apiClient.get(`/auth/reactive/${userId}`)
+  const response=await apiClient.patch(`/auth/reactive/${userId}`)
   return response.data
 },
 checkSystemSetup: async()=>{
