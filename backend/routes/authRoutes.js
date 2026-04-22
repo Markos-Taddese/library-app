@@ -11,7 +11,8 @@ const{
     changePassword,
     deactiveUser,
     reactiveUser,
-    searchUser
+    searchUser,
+    adminRecovery
 }= require('../controllers/authController')
 const{
     authToken,
@@ -23,8 +24,9 @@ route.post('/login', loginuser)
 route.post('/refresh-token', refreshToken)
 route.post('/sign/admin',registerFirstUser)
 route.get('/check-setup', checkSystemSetup);
+route.post('/admin/recover',adminRecovery)
 route.use(authToken); 
-route.delete('/logout', logoutUser)
+route.post('/logout', logoutUser)
 route.put('/update/password', changePassword)
 route.get('/me', getMyProfile)
 route.use(protect)
@@ -34,4 +36,5 @@ route.post('/sign/user',registerUser)
 route.patch('/deactivate/:id',deactiveUser)
 route.patch('/reactive/:id',reactiveUser)
 route.get('/search', searchUser)
+
 module.exports = route

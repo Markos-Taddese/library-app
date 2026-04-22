@@ -83,6 +83,10 @@ reactiveUser: async(userId)=>{
 checkSystemSetup: async()=>{
   const response = await apiClient.get('/auth/check-setup');
   return response.data
+},
+adminRecovery: async(credentials)=>{
+  const response = await apiClient.post('/auth/admin/recover', credentials);
+  return response.data
 }
   };
 export default authService;

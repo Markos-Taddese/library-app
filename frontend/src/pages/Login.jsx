@@ -7,6 +7,8 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [mode, setMode] = useState('login'); // 'login' or 'recover'
+  const [recoveryData, setRecoveryData] = useState({ email: '', recoveryKey: '', newPassword: '' });
   const { login, user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,7 +28,7 @@ const Login = () => {
     console.log("Location State:", location.state);
     if (location.state?.message) {
       showToast({ message: location.state.message, type: 'success' });
-    //Clear the state so the toast doesn't pop up again on refresh
+      //Clear the state so the toast doesn't pop up again on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location, showToast]);
@@ -65,56 +67,127 @@ if (loading) return null
     console.error("Login failed:", err);
   }
 };
+const handleRecoverySubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      // Use your authService to hit the recovery endpoint we talked about
+      await authService.adminRecovery(recoveryData);
+      showToast({ message: 'Password updated! Please log in.', type: 'success' });
+      setRecoveryData({ email: '', recoveryKey: '', newPassword: '' });//clear the recovery state after recocey data submission
+      setMode('login'); // Switch back to login automatically
+    } catch (err) {
+      setError(err.response?.data?.message || 'Recovery failed');
+    }
+  };
 return (
   <div className="flex h-screen items-center justify-center bg-slate-50">
     <div className="w-full max-w-md px-4">
-      {/* System Branding */}
-    <div className="text-center mb-8">
-      <h1 className="text-3xl font-extrabold text-slate-900">LMS</h1>
-      <p className="text-slate-500 mt-2">Authorized Personnel & Members Only</p>
-    </div>
-  <form onSubmit={handleSubmit} className="bg-white p-8 shadow-sm border border-slate-200 space-y-6">
-     {error && (
-            <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4 flex items-center">
-             <p className="text-sm text-red-700 font-medium">{error}</p>
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-extrabold text-slate-900">{mode === 'login' ? 'LMS' : 'Recovery'}</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {mode === 'login' ? 'Authorized Personnel & Members Only' : 'Reset administrator password'}
+        </p>
+          </div>
+
+    <form 
+        onSubmit={mode === 'login' ? handleSubmit : handleRecoverySubmit} 
+        className="bg-white p-6 shadow-sm border border-slate-200 space-y-5">
+        {error && (
+          <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-3 flex items-center">
+            <p className="text-sm text-red-700 font-medium">{error}</p>
+          </div>
+        )}
+        {/* LOGIN MODE INPUTS  */}
+     {mode === 'login' ? (
+       <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1">Username</label>
+          <input
+          type="text" 
+          className="w-full border border-slate-300 px-4 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200"
+          placeholder="Enter username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+           />
             </div>
-          )}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Username</label>
-        <input 
-            type="text" 
-            className="w-full border border-slate-300 px-4 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200"
-            placeholder="Enter your username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </div>  
-
-      <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Password</label>
-        <input 
-            type="password" 
-            className="w-full border border-slate-300 px-4 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+       <label className="block text-sm font-semibold text-slate-700 mb-1">Password</label>
+       <input
+       type="password" 
+       className="w-full border border-slate-300 px-3 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200"
+       placeholder="••••••••"
+       value={password}
+       onChange={(e) => setPassword(e.target.value)}
+       required
+        />
+          </div>
         </div>
+        ) : (
+      /*ADMIN RECOVERY MODE*/
+      <div className="space-y-4">
+       <div className="border border-slate-200 bg-slate-50 p-3">
+        <p className="text-[10px] font-bold uppercase text-slate-400">Notice</p>
+        <p className="text-xs text-slate-600 italic">Staff & members: Contact Admin for resets.</p>
+          </div>
+      <div className="space-y-3">
+       <div>
+       <label className="block text-sm font-semibold text-slate-700 mb-1">Admin Email</label>
+       <input
+       type="email"
+       className="w-full border border-slate-300 px-3 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200" 
+       placeholder="admin@library.os"
+       value={recoveryData.email || ''} 
+       onChange={(e) => setRecoveryData({...recoveryData, email: e.target.value})}
+       required
+         />
+          </div>
+      <div>
+       <label className="block text-sm font-semibold text-slate-700 mb-1">Recovery Key</label>
+       <input 
+       type="text" 
+       className="w-full border border-slate-300 px-3 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200" 
+       placeholder="Enter your key"
+       value={recoveryData.recoveryKey || ''}
+       onChange={(e) => setRecoveryData({...recoveryData, recoveryKey: e.target.value})}
+       required
+          />
+          </div>
+      <div>
+       <label className="block text-sm font-semibold text-slate-700 mb-1">New Password</label>
+       <input 
+        type="password" 
+        className="w-full border border-slate-300 px-3 py-2 rounded-sm bg-white text-slate-900 placeholder-slate-400 focus:bg-slate-50 focus:ring-2 focus:ring-slate-600 focus:border-slate-600 sm:text-sm outline-none transition-all duration-200" 
+        placeholder="••••••••"
+        value={recoveryData.newPassword || ''}
+        onChange={(e) => setRecoveryData({...recoveryData, newPassword: e.target.value})}
+        required
+          />
+           </div>
+          </div>
+        </div>
+        )}
+      <button type="submit" className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-sm hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 shadow-sm">
+          {mode === 'login' ? 'Sign In to Dashboard' : 'Reset Password'}
+        </button>
 
-<button 
-    type="submit" 
-      className="w-full bg-slate-900 text-white font-semibold py-3 rounded-sm hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 shadow-md">
-    Sign In to Dashboard
-    </button>
+      <div className="text-center">
+        <button 
+            type="button"
+            onClick={() => { setMode(mode === 'login' ? 'recover' : 'login'); setError(''); }}
+            className="text-xs text-slate-500 hover:text-slate-800 underline transition-colors"
+          >
+            {mode === 'login' ? 'Forgot password? Use Recovery Key' : 'Back to Login'}
+          </button>
+        </div>
     </form>
-    <p className="text-center text-slate-400 text-xs mt-8">
-  &copy; {new Date().getFullYear()} Library Management System. All rights reserved.
-</p>
-  </div>
+     <p className="text-center text-slate-400 text-xs mt-6">
+        &copy; {new Date().getFullYear()} Library Management System.
+      </p>
     </div>
-  );
+  </div>
+);
 };
 
 export default Login;

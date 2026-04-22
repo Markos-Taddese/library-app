@@ -10,23 +10,41 @@ if(existedUser[0].count>0){
     err.statusCode=403
 return next(err) //there's already an admin Registered
 }
-
-    const {username,email,password}=req.body
+const {username,email,password}=req.body
     if(!username||!password ||!email){
         const err= new Error("password, username and email are required !")
         err.statusCode=400
         return next(err)
     } 
-    const hashedPassword= await bcrypt.hash(password,10);
-    const role="admin"
-   await db.execute(`INSERT INTO users (username,email,role,password_hash) 
-                                       VALUES(?,?,?,?)`,[username,email,role,hashedPassword])
-return res.status(201).json({ success:true,
-                              message: "System initialized. Admin registered successfully." });//the admin has to login after regsitration
-} catch(error){
- return next(error)
+    //trim and clean username and email credntials
+const cleanedUserName=username.trim()
+const cleanedEmail = email.trim().toLowerCase();
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!emailRegex.test(cleanedEmail)) {
+    const err= new Error("Invalid email format");
+   err.statusCode=400
+    return next(err)
 }
-
+//make sure the passowrd is atleast 8 chars
+if (password.length < 8) {
+    const err= new Error("Password must be at least 8 characters");
+   err.statusCode=400
+    return next(err)
+}
+ const hashedPassword= await bcrypt.hash(password,10);
+ const role="admin"
+ //genrate the hash key
+ const plainKey = crypto.randomBytes(8).toString('hex'); 
+ const hashedKey = await bcrypt.hash(plainKey, 10);  
+   await db.execute(`INSERT INTO users (username,email,role,password_hash, recovery_key_hash) 
+                                       VALUES(?,?,?,?,?)`,[cleanedUserName,cleanedEmail,role,hashedPassword, hashedKey])
+                              
+return res.status(201).json({ success:true,
+                              message: "System initialized. Admin registered successfully.",
+                              recoveryKey:plainKey  });//the admin has to login after regsitration
+} catch(error){
+       return next(error)
+    }
 }
 //to let the frontend to know if the database is empty,
 //  to trigger a Setup admin page for registering the first user
@@ -37,6 +55,43 @@ async function checkSystemSetup(req, res, next) {
   } catch (error) {
     next(error);
   }
+}
+async function adminRecovery(req, res, next){
+const { email, recoveryKey, newPassword } = req.body;
+try{
+    //must have specified the role, so no one other than admin cant use this route
+    const [users] = await db.execute('SELECT * FROM users WHERE email = ? AND role = "admin"', [email]);
+    const user = users[0];
+     if (!user){
+        const err= new Error("User not found")
+        err.statusCode=404;
+        return next(err)
+        }
+    //validtae our recovery key
+    const isKeyValid = await bcrypt.compare(recoveryKey, user.recovery_key_hash);
+    if (!isKeyValid){
+        const err=new Error("Invalid recovery key")
+        err.statusCode=401;
+        return next(err);
+        }
+    //make sure the new password is atleast 8 chars
+    if (!newPassword || newPassword.length < 8) {
+        const err = new Error("New password must be at least 8 characters");
+        err.statusCode = 400;
+        return next(err);
+        }
+    //hash the new password
+    //TODO ; CLEAR  recovery hash after one use
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await db.execute(
+        'UPDATE users SET password_hash = ? WHERE user_id= ?',
+        [newPasswordHash, user.user_id]
+        );
+    res.status(200).json({ message: "Password updated successfully. You can now log in." });
+
+} catch(error){
+       return next(error)
+    }
 }
 async function loginuser(req,res,next){
 const {username,password}=req.body
@@ -440,5 +495,6 @@ module.exports={
     changePassword,
     deactiveUser,
     reactiveUser,
-    searchUser
+    searchUser,
+    adminRecovery
 }
