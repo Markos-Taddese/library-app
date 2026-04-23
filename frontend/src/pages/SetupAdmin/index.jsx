@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
-import RecoveryModal from '../components/reusable/RecoveryModal';
+import authService from '../../services/authService';
+import RecoveryModal from './RecoveryModal';
 const SetupAdmin = () => {
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const [showModal, setShowModal] = useState(!!sessionStorage.getItem('admin_recovery_key'));

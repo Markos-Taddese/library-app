@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import BookManagement from './pages/BookManagement';
 import LoanManagement from './pages/LoanManagement';
 import MemberManagement from './pages/MemberManagement';
-import ProtectedRoute from './utils/ProtectedRoute';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import ForcePasswordChange  from './pages/ForcePasswordChange'
 import SetupAdmin from './pages/SetupAdmin';
 import StaffManagement from './pages/StaffManagement'
