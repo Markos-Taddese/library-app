@@ -81,10 +81,10 @@ const StaffManagement = () => {
     const { staffMember, action } = confirmModal;
     try {
       if (action === 'deactivate') {
-        await authService.deactiveUser(staffMember.userId);
+        await authService.deactivateUser(staffMember.userId);
         showToast({ message: `${staffMember.displayName} deactivated.`, type: 'success' });
       } else {
-        await authService.reactiveUser(staffMember.userId);
+        await authService.reactivateUser(staffMember.userId);
         showToast({ message: `${staffMember.displayName} reactivated.`, type: 'success' });
       }
       //Clear modal data before refreshing list to make sure the UI feels responsive.

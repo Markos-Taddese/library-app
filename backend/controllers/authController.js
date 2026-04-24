@@ -93,7 +93,7 @@ try{
        return next(error)
     }
 }
-async function loginuser(req,res,next){
+async function loginUser(req,res,next){
 const {username,password}=req.body
     try { 
         const[row]= await db.execute("SELECT * FROM users WHERE username =? AND is_active=1",[username])
@@ -117,8 +117,11 @@ const userPayload ={
     email:users.email,//useful in user profile
     must_change_password:Boolean(users.must_change_password) //better reading for frontend
 }
-const accessToken=jwt.sign(userPayload, process.env.TOKEN_SECRET,{expiresIn:'1m'})
+const accessToken=jwt.sign(userPayload, process.env.TOKEN_SECRET,{expiresIn:'15m'})
 const refreshByte=crypto.randomBytes(40).toString('hex');
+// Clean up expired or revoked tokens for this user.
+// This keep active sessions (is_revoked=0) on other devices alive.
+await db.execute("DELETE FROM refresh_tokens WHERE user_id=? AND (is_revoked = 1 OR expires_at < NOW())",[userPayload.id])
 console.log(userPayload)
 await db.execute("INSERT INTO refresh_tokens (user_id,token,expires_at) VALUES (?,?,DATE_ADD(NOW(),INTERVAL 14 DAY))",[userPayload.id, refreshByte])
 
@@ -140,27 +143,38 @@ if(!refresher){
 } // no refrsh token , unauthroized to acess this endpoint
 try {
   const [rows] = await db.execute(`
-                SELECT u.user_id, u.username, u.role 
+                SELECT u.user_id, u.username, u.role, u.email, u.must_change_password,rt.is_revoked
                 FROM refresh_tokens rt
                 JOIN users u ON rt.user_id = u.user_id
-                WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > NOW() AND is_active
+                WHERE rt.token = ?  AND rt.expires_at > NOW() AND u.is_active=1
             `, [refresher]);
 if (rows.length === 0){
-    const err=new Error("token unavailable, revoked or expired")// Token revoked or expired
+    const err=new Error("token unavailable or expired")// Token expired
     err.statusCode=403
      return next(err)
 }
+
 const userpayload = rows[0];
+//detects if this token was already used (revoked).
+//and delete the seesion 
+if (userpayload.is_revoked === 1) {
+    await db.execute("DELETE FROM refresh_tokens WHERE user_id = ?", [userpayload.user_id]);
+    const err = new Error("Security Breach: Reuse detected. All sessions killed.");
+    err.statusCode = 403;
+    return next(err);
+}
 const newAccessToken = jwt.sign({ id: userpayload.user_id, 
                                 name: userpayload.username, 
-                                role: userpayload.role }, 
-                                process.env.TOKEN_SECRET, { expiresIn: '1m' }); //expired time only 1m for developement testing
+                                role: userpayload.role,
+                             }, process.env.TOKEN_SECRET, { expiresIn: '15m' });
  const newRefresher=crypto.randomBytes(40).toString('hex');
 
- //update only the specifc token thats getting replaced
- await db.execute("UPDATE  refresh_tokens SET token=?, expires_at=DATE_ADD(NOW(),INTERVAL 14 DAY) WHERE token=?",
-                 [newRefresher,refresher]);
- await db.execute('DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at < NOW()',[userpayload.user_id]);// delete all expired tokens for that user_id
+// Rotate tokens, revoke the old one and issue a new one
+ await db.execute("UPDATE  refresh_tokens SET is_revoked=1 WHERE token=?",
+                 [refresher]);
+//insert the new tokens on db
+await db.execute("INSERT INTO refresh_tokens (user_id,token,expires_at) VALUES (?,?,DATE_ADD(NOW(),INTERVAL 14 DAY))",[userpayload.user_id,newRefresher])
+await db.execute("DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at < NOW()",[userpayload.user_id]);// delete all expired tokens for that user_id
    res.json({ accessToken: newAccessToken,
              newRefreshToken:newRefresher
   });
@@ -171,11 +185,16 @@ next(err)
 }
 async function registerUser(req,res,next){
 try{   
-    //check if theres and admin first  
+    //if thers no user in db this endpoint shouldnt be accessible 
     const[existedUser]= await db.execute('SELECT COUNT(*) AS count from users')
-if(existedUser[0].count>=1){
+    if (existedUser[0].count === 0) {
+    const err = new Error("System not initialized. Please run first-time setup.");
+    err.statusCode = 403; 
+    return next(err); 
+}
+
 const {username,email,password,role}=req.body
-if (!username || !password || !role) {
+if (!username || !email || !password || !role) {
     const err=new Error("Missing required fields")
     err.statusCode=400
         return next(err)
@@ -190,11 +209,13 @@ if (!allowedRoles.includes(role)) {
 const [existedRecord]=await db.execute("SELECT  email, username,is_active FROM users WHERE email=? OR username=?",[email,username])
 //check if theres existed record of user with the credtials accepted from request body
 if(existedRecord.length>0){
-    const user=existedRecord[0]
-   const statusMsg = user.is_active === 0 ? "account is deactivated" : "is already active";
- const err = new Error(`An active user already exists with  this email or username ${statusMsg}.`);
+const user = existedRecord[0];
+    // Check which one actually matched to be specific
+    const matchedField = user.email === email ? "Email" : "Username";
+    const statusMsg = user.is_active === 0 ? "deactivated" : "already active";
+    const err = new Error(`${matchedField} is linked to a ${statusMsg} account.`);
     err.statusCode = 409;
-      return next(err)
+    return next(err);
     
    } 
 const hashedPassword= await bcrypt.hash(password,10)
@@ -203,9 +224,9 @@ const must_change_password = true;
 await db.execute(`INSERT INTO users (username,email,password_hash,role,must_change_password) 
                                        VALUES(?,?,?,?,?)`,[username,email,hashedPassword,role,must_change_password])
 return res.status(201).json({ success:true,
-    message:"Succesfully Reegistered staff"})
+    message:`Succesfully Reegistered ${role}`})
 
-}
+
 
 } catch(error){
     next(error)
@@ -220,7 +241,8 @@ if(!tokenToDelete){
     return next(err)
 } 
 try{
-const [result]=await db.execute('DELETE FROM refresh_tokens WHERE token = ?',[tokenToDelete]);
+    //set old tokens too "is revoked" instaed of hard deleting it. 
+const [result]=await db.execute("UPDATE  refresh_tokens SET is_revoked=1 WHERE token=? AND  is_revoked=0",[tokenToDelete]);
 if (result.affectedRows === 0) {
        const err = new Error("Token not found or already logged out")
        err.statusCode=404
@@ -251,7 +273,7 @@ async function getMyProfile(req,res,next){
 }
 async function profileUpdate(req,res,next){
 try{
-  const id=req.user.id // get the id from middlware, because the user is updating themselves
+const id=req.user.id // get the id from middlware, because the user is updating themselves
 const updates=req.body
 //prevent mass assignment by specifying fields to update
 const fieldsToUpdate=['username','email']
@@ -381,7 +403,7 @@ await db.query("INSERT INTO refresh_tokens (user_id,token,expires_at) VALUES (?,
     }
 }
 
-async function deactiveUser(req,res,next){
+async function deactivateUser(req,res,next){
     const {id}=req.params;
     if (!id) {
           const err=new Error('user ID is required for deletion.')
@@ -418,7 +440,7 @@ try{
 }
 }
 
-async function reactiveUser(req,res,next){
+async function reactivateUser(req,res,next){
 const {id}=req.params
 if (!id) {
           const err=new Error('user ID is required for activation.')
@@ -440,7 +462,7 @@ try{
     return next(err);
   }
 await db.execute('UPDATE users SET is_active=1 WHERE user_id=?',[id])
-res.status(200).json({message:"User activated succesfully!!"})
+res.status(200).json({message:"User activated successfully!!"})
 }catch(error){
     next(error)
 }
@@ -487,14 +509,14 @@ module.exports={
     registerFirstUser,
     checkSystemSetup,
     registerUser,
-    loginuser,
+    loginUser,
     refreshToken,
     logoutUser,
     getMyProfile,
     profileUpdate,
     changePassword,
-    deactiveUser,
-    reactiveUser,
+    deactivateUser,
+    reactivateUser,
     searchUser,
     adminRecovery
 }

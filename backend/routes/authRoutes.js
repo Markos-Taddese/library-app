@@ -3,14 +3,14 @@ const{
     registerFirstUser,
     checkSystemSetup,
     registerUser,
-    loginuser,
+    loginUser,
     refreshToken,
     logoutUser,
     getMyProfile,
     profileUpdate,
     changePassword,
-    deactiveUser,
-    reactiveUser,
+    deactivateUser,
+    reactivateUser,
     searchUser,
     adminRecovery
 }= require('../controllers/authController')
@@ -20,7 +20,7 @@ const{
     protect
 }=require('../middleware/authToken')
 const route=express.Router()
-route.post('/login', loginuser)
+route.post('/login', loginUser)
 route.post('/refresh-token', refreshToken)
 route.post('/sign/admin',registerFirstUser)
 route.get('/check-setup', checkSystemSetup);
@@ -33,8 +33,8 @@ route.use(protect)
 route.put('/update',profileUpdate)
 route.use(isAdmin)
 route.post('/sign/user',registerUser)
-route.patch('/deactivate/:id',deactiveUser)
-route.patch('/reactive/:id',reactiveUser)
+route.patch('/deactivate/:id',deactivateUser)
+route.patch('/reactive/:id',reactivateUser)
 route.get('/search', searchUser)
 
 module.exports = route
