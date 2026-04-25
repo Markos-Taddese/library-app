@@ -87,6 +87,10 @@ checkSystemSetup: async()=>{
 adminRecovery: async(credentials)=>{
   const response = await apiClient.post('/auth/admin/recover', credentials);
   return response.data
-}
+},
+resetPassword: async(userId)=>{
+  const response=await apiClient.patch(`/auth/reset-password/${userId}`)
+  return response.data
+},
   };
 export default authService;

@@ -143,7 +143,7 @@ if(!refresher){
 } // no refrsh token , unauthroized to acess this endpoint
 try {
   const [rows] = await db.execute(`
-                SELECT u.user_id, u.username, u.role, u.email, u.must_change_password,rt.is_revoked
+                SELECT u.user_id, u.username, u.role,rt.is_revoked
                 FROM refresh_tokens rt
                 JOIN users u ON rt.user_id = u.user_id
                 WHERE rt.token = ?  AND rt.expires_at > NOW() AND u.is_active=1
@@ -505,6 +505,34 @@ async function searchUser(req, res, next) {
     next(error)
     }
 }
+async function resetPassword(req,res,next){
+    const {id}=req.params;
+    if (!id) {
+          const err=new Error('user ID is required for activation.')
+          err.statusCode=400;
+          return next(err)
+        }
+try{
+    //generate a random number for password
+ const plainKey = crypto.randomBytes(8).toString('hex'); 
+ const hashedKey = await bcrypt.hash(plainKey, 10);  
+ // update credentials and force password change on next login
+ await db.execute(
+      `UPDATE users 
+       SET password_hash = ?, must_change_password = 1 
+       WHERE user_id = ?`, 
+      [hashedKey, id]
+    );
+ // Return plaintext key for one time display in Admin UI
+    res.status(200).json({ 
+      success: true, 
+      message: "Password reset successful", 
+      temporaryPassword: plainKey 
+    });
+}catch(err){
+next(err)
+}
+}
 module.exports={
     registerFirstUser,
     checkSystemSetup,
@@ -518,5 +546,6 @@ module.exports={
     deactivateUser,
     reactivateUser,
     searchUser,
-    adminRecovery
+    adminRecovery,
+    resetPassword
 }

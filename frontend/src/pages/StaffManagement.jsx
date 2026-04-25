@@ -3,6 +3,7 @@ import { useToast } from '../hooks/useToast';
 import DataTable from '../components/reusable/DataTable';
 import ConfirmationModal from '../components/reusable/ConfirmationModal';
 import FormModal from '../components/reusable/FormModal'; 
+import SecretDisplayModal from '../components/reusable/SecretDisplayModal';
 import authService from '../services/authService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -19,7 +20,11 @@ const StaffManagement = () => {
   // Modal States
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, staffMember: null, action: '' });
-
+  const [resetResult, setResetResult] = useState(() => {
+  // Use a function to initialize so it only runs once
+  const saved = sessionStorage.getItem('temp_reset');
+  return saved ? JSON.parse(saved) : null;
+});
   // Debounce logic for search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -77,9 +82,16 @@ const StaffManagement = () => {
     }
   };
 
-  const executeStatusToggle = async () => {
-    const { staffMember, action } = confirmModal;
-    try {
+  const executeAction = async () => {
+  const { staffMember, action } = confirmModal;
+  try {
+   if (action === 'reset') {
+  const data = await authService.resetPassword(staffMember.userId);
+  const result = { password: data.temporaryPassword, name: staffMember.displayName };
+  sessionStorage.setItem('temp_reset', JSON.stringify(result));
+  setResetResult(result);
+} else {
+
       if (action === 'deactivate') {
         await authService.deactivateUser(staffMember.userId);
         showToast({ message: `${staffMember.displayName} deactivated.`, type: 'success' });
@@ -87,13 +99,18 @@ const StaffManagement = () => {
         await authService.reactivateUser(staffMember.userId);
         showToast({ message: `${staffMember.displayName} reactivated.`, type: 'success' });
       }
-      //Clear modal data before refreshing list to make sure the UI feels responsive.
-      setConfirmModal({ isOpen: false, staffMember: null, action: '' });
-      loadStaff(debouncedQuery, statusFilter);
-    } catch (err) {
-      showToast({ message: err.response?.data?.message || 'Action failed', type: 'error' });
     }
-  };
+ //Clear modal data before refreshing list to make sure the UI feels responsive.
+    setConfirmModal({ isOpen: false, staffMember: null, action: '' });
+    loadStaff(debouncedQuery, statusFilter);
+  } catch (err) {
+    showToast({ message: err.response?.data?.message || 'Action failed', type: 'error' });
+  }
+};
+const handleCloseSecretModal = () => {
+  sessionStorage.removeItem('temp_reset'); 
+  setResetResult(null);                   
+};
 
   const columns = [
     { key: 'displayName', header: 'Name' },
@@ -129,19 +146,33 @@ const isAdmin = currentUser?.role === 'admin';
       }
 
 return (
+  <div className="flex items-center gap-4">
+  {/* RESET PASSWORD BUTTON */}
   <button
-  onClick={() => setConfirmModal({ 
-    isOpen: true, 
-    staffMember: row, 
-    action: row.isActive ? 'deactivate' : 'reactivate' 
-  })}
-  className={`text-sm font-semibold text-slate-900 dark:text-slate-400 transition-colors ${
+    onClick={() => setConfirmModal({ 
+      isOpen: true, 
+      staffMember: row, 
+      action: 'reset' 
+    })}
+    className="text-sm font-semibold text-slate-900 dark:text-slate-400 hover:text-opacity-50 dark:hover:text-slate-900 transition-colors"
+  >
+    Reset Password
+  </button>
+{/* STATUS TOGGLE BUTTON */}
+  <button
+    onClick={() => setConfirmModal({ 
+      isOpen: true, 
+      staffMember: row, 
+      action: row.isActive ? 'deactivate' : 'reactivate' 
+    })}
+    className={`text-sm font-semibold text-slate-900 dark:text-slate-400 transition-colors ${
     row.isActive ? "hover:text-red-600 dark:hover:text-red-500" : "hover:text-emerald-600 dark:hover:text-emerald-500 "
-  }`}
->
-  {row.isActive ? 'Deactivate' : 'Reactivate'}
-</button>
-      );
+    }`}
+  >
+    {row.isActive ? 'Deactivate' : 'Reactivate'}
+  </button>
+</div>
+  );
     }
   }
   ];
@@ -215,14 +246,28 @@ return (
     />
 
   <ConfirmationModal 
-      isOpen={confirmModal.isOpen} 
-      onClose={() => setConfirmModal({ isOpen: false, staffMember: null, action: '' })}
-      onConfirm={executeStatusToggle}
-      title={`Confirm ${confirmModal.action}`}
-      message={`Are you sure you want to ${confirmModal.action} ${confirmModal.staffMember?.displayName}?`}
-      confirmText="Confirm Action"
-      isDestructive={confirmModal.action === 'deactivate'}
-    />
+      
+  isOpen={confirmModal.isOpen} 
+  onClose={() => setConfirmModal({ isOpen: false, staffMember: null, action: '' })}
+  onConfirm={executeAction} 
+  title={confirmModal.action === 'reset' ? 'Reset User Password' : `Confirm ${confirmModal.action}`}
+  message={
+    confirmModal.action === 'reset' 
+      ? `Are you sure you want to reset the password for ${confirmModal.staffMember?.displayName}? A temporary password will be generated.`
+      : `Are you sure you want to ${confirmModal.action} ${confirmModal.staffMember?.displayName}?`
+  }
+  confirmText={confirmModal.action === 'reset' ? 'Generate Password' : 'Confirm Action'}
+  isDestructive={confirmModal.action === 'deactivate'} 
+/>
+{resetResult && (
+  <SecretDisplayModal
+    title="Password Reset"
+    description={`Temporary credentials for "${resetResult.name}".`}
+    secret={resetResult.password}
+    buttonText="Done"
+    onAction={handleCloseSecretModal}
+  />
+)}
   </div>
 );
 };

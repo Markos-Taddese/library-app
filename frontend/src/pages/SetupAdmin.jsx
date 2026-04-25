@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../../services/authService';
-import RecoveryModal from './RecoveryModal';
+import authService from '../services/authService';
+import SecretDisplayModal from '../components/reusable/SecretDisplayModal';
 const SetupAdmin = () => {
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   const [showModal, setShowModal] = useState(!!sessionStorage.getItem('admin_recovery_key'));
@@ -10,6 +10,10 @@ const SetupAdmin = () => {
   const navigate = useNavigate();
 // Checks if setup is needed
 useEffect(() => {
+  //clear old tokens from broswser to prevent auto loggin in directly after signup
+  //Tip: old tokens exist and trick the react useAuth that thers a user
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
   const verifySetup = async () => {
     try {
       const data = await authService.checkSystemSetup();
