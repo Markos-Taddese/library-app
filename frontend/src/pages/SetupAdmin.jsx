@@ -104,11 +104,14 @@ return (
 
       </form>
 {showModal && (
-      <RecoveryModal 
-         recoveryKey={recoveryKey} 
-            onNavigate={handleRedirect}
-       />
-    )}
+  <SecretDisplayModal 
+    title="Master Recovery Key"
+    description="Save this key securely. It is the only way to bypass the system and recover admin access if you lose your password. This will only be shown once."
+    secret={recoveryKey}
+    buttonText="proceed to login"
+    onAction={handleRedirect}
+  />
+)}
     </div>
     </div>
   );
