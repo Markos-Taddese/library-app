@@ -7,10 +7,7 @@ const extractMemberArray = (response) => {
     return [];
 };
 
-export const getMembers = async () => {
-  const response = await apiClient.get('/members/all');
-  return extractMemberArray(response);
-};
+
 
 export const searchMembers = async (query) => {
   const response = await apiClient.get(`/members/search?search=${encodeURIComponent(query)}`);

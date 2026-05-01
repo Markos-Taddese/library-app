@@ -1,24 +1,5 @@
 const db= require('../config/database')
-async function getMembers(req,res,next){
-   try{ 
-    const [result]=await db.query('SELECT * FROM members WHERE is_deleted = FALSE')
-    //wrapping result array in an object for api consistency
-       if (result.length === 0) {
-            return res.status(200).json({
-              success: true,
-              message: 'No active members have been in the system.',
-              members: []
-            });
-        }
-    res.status(200).json({
-      success:true,
-      members:result})
-}
-catch(error){
-  //internal server error
-    next(error)
-  }
-}
+
 async function createMember(req,res,next){
   let connection;
  try{   
@@ -260,7 +241,7 @@ catch(error){
 next(error)
 }
 }
-module.exports={getMembers,
+module.exports={
                 getDetailMember,
                 createMember,
                 deleteMember,

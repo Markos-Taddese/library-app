@@ -1,7 +1,7 @@
 const express=require('express')
 const routes=express.Router()
 //import the handler functions from the memberController
-const {getMembers,
+const {
        createMember,
        deleteMember,
        updateMemberInfo,
@@ -11,7 +11,6 @@ const {getMembers,
        }=require('../controllers/memberController')
 // These routes are mounted onto a base URL (/loans) in server.js to form the final API endpoints.
 routes.post('/',createMember)
-routes.get('/all',getMembers)
 routes.get('/stats',getMemberStats)
 // GET /members/search
 routes.get('/search',searchMembers)

@@ -5,7 +5,7 @@ import FormModal from '../components/reusable/FormModal';
 import HistoryModal from '../components/reusable/HistoryModal';
 import { useToast } from '../hooks/useToast'; 
 import { 
-    getMembers, 
+   
     deactivateMember, 
     searchMembers, 
     updateMember, 
@@ -46,14 +46,14 @@ const MemberManagement = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = query 
-        ? await searchMembers(query) 
-        : await getMembers();
+      const data = await searchMembers(query) 
+        
+        
         
       const normalizedData = data.map(member => ({
         ...member,
         name: `${member.first_name} ${member.last_name}`,
-        memberId: member.member_id || member.memberId,
+        memberId: member.member_id,
         phone_number: member.phone_number, 
       }));
       

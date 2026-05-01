@@ -106,7 +106,7 @@ return (
 {showModal && (
   <SecretDisplayModal 
     title="Master Recovery Key"
-    description="Save this key securely. It is the only way to bypass the system and recover admin access if you lose your password. This will only be shown once."
+    description="The following key is required for account recovery. It is only displayed once and is encrypted in the database. Failure to store this key will result in permanent loss of access if credentials are lost."
     secret={recoveryKey}
     buttonText="proceed to login"
     onAction={handleRedirect}

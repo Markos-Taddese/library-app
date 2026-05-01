@@ -31,6 +31,10 @@ const[resultAuthor]=await connection.query(`SELECT * FROM authors where author_n
 if(resultAuthor.length>0){
   // Author exists: get the existing ID
   authorId=resultAuthor[0].author_id
+  //but if author was deleted before revive it 
+   if (resultAuthor[0].is_deleted === 1){
+      await connection.query('UPDATE authors SET  is_deleted = 0 WHERE author_id = ?', [authorId]);
+    }
 }  else{
   // Author does not exist: insert the new author and get the new ID
  const[insertResultAuthor]=await connection.query(`INSERT INTO authors (author_name) VALUES(?)`,[author])
@@ -38,10 +42,23 @@ if(resultAuthor.length>0){
 }
 let bookId;
 // Check if the title already exists for this author
-const[resultBook]=await connection.query(`SELECT * FROM books WHERE title=? and author_id=?`,[title,authorId])
+let bookQuery = `SELECT * FROM books WHERE title=? AND author_id=?`;
+let queryParams = [title, authorId];
+
+if (yearValue === null) {
+    bookQuery += ` AND published_year IS NULL`;
+} else {
+    bookQuery += ` AND published_year = ?`;
+    queryParams.push(yearValue);
+}
+
+const [resultBook] = await connection.query(bookQuery, queryParams);
 if(resultBook.length>0){
   // Title exists: get the existing ID (so a copy is being added, not a new title)
   bookId=resultBook[0].book_id
+   if (resultBook[0].is_deleted === 1){
+      await connection.query('UPDATE books SET  is_deleted = 0 WHERE book_id = ?', [bookId]);
+    }
 }
 else{
   // Title does not exist: insert the new title into the 'books' table
@@ -109,6 +126,7 @@ next(error);
 
 }
 async function deleteBooks(req,res,next){
+let connection;
 try{  
   console.log('Delete ID:', req.params.id);
 const copyId=req.params.id
@@ -119,7 +137,7 @@ if (!copyId) {
         }
 connection= await db.getConnection();
 await connection.beginTransaction();
-// Get the book_id and author_id related to this copy before deleting it.
+// Get the book_id and author_id related to this copy before deactivating it.
 const[copyInfo]=await connection.query(`SELECT b.book_id, b.author_id,bc.status
                                         FROM book_copies bc
                                         INNER JOIN books b ON bc.book_id=b.book_id
@@ -131,33 +149,41 @@ if(copyInfo.length===0){
   return next(err);
 }
 const { status, book_id, author_id } = copyInfo[0];
-  // If the copy is currently loaned, we must prevent the physical delete.
-if (status !== 'available') {
+//check if its already "soft" deleted.
+ if (status === "deleted") {
+    await connection.rollback();
+    // ID found, but already deactivated.
+    const err = new Error(`copy ID ${copyId} is already deactivated.`);
+    err.statusCode = 400; 
+    return next(err);
+  }
+  // If the copy is currently loaned, we must prevent the deactivation.
+if (status === 'loaned') {
 await connection.rollback();
 const err = new Error(`Cannot delete copy ID ${copyId}. 
   It is currently marked as '${status}' and must be returned first.`);
 err.statusCode = 409; // Conflict
 return next(err);
         }
-await connection.query('DELETE FROM book_copies where copy_id=?',[copyId]);
+await connection.query('UPDATE book_copies SET status="deleted" where copy_id=?',[copyId]);
 //Check for Remaining Copies 
 const[copiesLeft]=await connection.query(`SELECT COUNT(*) AS count 
-                                         FROM book_copies WHERE book_id=?`,[book_id])
+                                         FROM book_copies WHERE book_id=? AND status != "deleted"`,[book_id])
 let authorRemoved=false;//boolean flag forlater use
 if(copiesLeft[0].count===0){
-// If no copies left, DELETE the book title.
-await connection.query('DELETE FROM books WHERE book_id = ?', [book_id]);
+// If no copies left, deactivate/ soft delete the book title.
+await connection.query('UPDATE books SET is_deleted=1 WHERE book_id = ?', [book_id]);
 //  Check for Remaining Books by the Author.
 const[booksLeft]=await connection.query(`SELECT COUNT(*) AS count 
-                                        FROM books where author_id=?`,[author_id])
+                                        FROM books where author_id=? AND is_deleted = 0`,[author_id])
 if(booksLeft[0].count===0){
-//If no books left, DELETE the author record.
-await connection.query(`DELETE FROM authors where author_id=?`,[author_id])
+//If no books left, deactivate/ soft delete the author record.
+await connection.query(`UPDATE  authors SET is_deleted=1 where author_id=?`,[author_id])
 authorRemoved=true;
 }
 }
 await connection.commit()
-let message=`Book's Copy ID ${copyId} deleted`
+let message=`Book's Copy ID ${copyId} has been successfully deactivated.`
 if (copiesLeft[0].count === 0) {
     message += " - Book title removed (no copies left)";
     //bookleft is invisible for this block so we use our flag
@@ -190,6 +216,7 @@ if (authorRemoved) {
     }
 }
 async function updateBooks(req, res,next){
+let connection;
 try{    
   const id = req.params.id;
     const updates = req.body;
@@ -201,14 +228,14 @@ try{
 connection = await db.getConnection();
 await connection.beginTransaction();
 // Get the current author_id for cleanup later
-const [[currentBookInfo]] = await connection.query('SELECT author_id FROM books WHERE book_id = ?', [id]);
-if (currentBookInfo.length === 0) {
+const [currentBookInfo] = await connection.query('SELECT author_id, is_deleted FROM books WHERE book_id = ?', [id]);
+if (currentBookInfo.length === 0 || currentBookInfo[0].is_deleted===1) {
   await connection.rollback()
-const err = new Error(`Book with ID ${id} not found.`);
+const err = new Error(`Book with ID ${id} not found or deactivated.`);
 err.statusCode = 404;
 return next(err);
   }
-const oldAuthorId=currentBookInfo.author_id;
+const oldAuthorId=currentBookInfo[0].author_id;
 const cleanedUpdates = {};
 let newAuthorId = oldAuthorId;
 let authorIdChanged = false;
@@ -242,10 +269,15 @@ for (const [key, value] of Object.entries(updates)) {
     }
 }
 if(authorNameUpdate !== undefined && authorNameUpdate !== null && authorNameUpdate !== ""){
-  const[result]=await connection.query(`SELECT author_id FROM authors WHERE author_name=?`,
+  const[result]=await connection.query(`SELECT author_id, is_deleted FROM authors WHERE author_name=?`,
                                      [authorNameUpdate])
   if(result.length>0){
     newAuthorId = result[0].author_id;
+//now that authors are being deactivated if they have no books left 
+//reactivate them and get the id instead of inserting them again.
+    if (result[0].is_deleted === 1){
+      await connection.query('UPDATE authors SET  is_deleted = 0 WHERE author_id = ?', [newAuthorId]);
+    }
   }
   else {
 // If not found, INSERT the new author and get the ID
@@ -278,13 +310,13 @@ return res.status(200).json({
   let message="Book update successfully applied"
 if (authorIdChanged) {
   // Check if the old author is now dont have any book left
-const [result] = await connection.query(
-'SELECT COUNT(*) AS count FROM books WHERE author_id = ?', 
+const [authorCheck] = await connection.query(
+'SELECT COUNT(*) AS count FROM books WHERE author_id = ? AND is_deleted=0', 
 [oldAuthorId]
 );
-// If the count is zero, DELETE the redundant author record.
-  if (result[0].count === 0) {
-      await connection.query('DELETE FROM authors WHERE author_id = ?', [oldAuthorId]);
+// If the count is zero, deactivate the redundant author record.
+  if (authorCheck[0].count === 0) {
+      await connection.query('UPDATE authors SET is_deleted=1 WHERE author_id = ?', [oldAuthorId]);
       message+=" and unused author removed"
      }
      else{
@@ -313,23 +345,27 @@ async function searchBooks(req, res, next) {
   try {  
     const { search, available } = req.query;
     
-    // FIX: Add sample_copy_id to search results
+    //Added b.is_deleted = 0 to WHERE and Removed 1=1 because we now have a filter to start with
+    //Added bc.status != 'deleted'
     let query = `SELECT b.book_id, b.title, a.author_name, b.published_year,
                         COUNT(bc.copy_id) AS total_copies,
                         COUNT(CASE WHEN bc.status = 'available' THEN 1 END) AS available_copies,
-                        MIN(CASE WHEN bc.status = 'available' THEN bc.copy_id ELSE NULL END) AS sample_copy_id
+                        -- Get the author's total active book, helpful in frontends warning message.
+                        (SELECT COUNT(*) FROM books b2 WHERE b2.author_id = b.author_id AND b2.is_deleted = 0) AS author_book_count,
+                        MIN(CASE WHEN bc.status = 'available' THEN bc.copy_id ELSE NULL END) AS sample_copy_id,
+                        JSON_ARRAYAGG(
+                        JSON_OBJECT('copy_id', bc.copy_id, 'status', bc.status)
+                        ) AS copies_list
                  FROM books b
                  INNER JOIN authors a ON b.author_id = a.author_id
-                 LEFT JOIN book_copies bc ON b.book_id = bc.book_id
-                 WHERE 1=1`;
+                 INNER JOIN book_copies bc ON b.book_id = bc.book_id AND bc.status != 'deleted'
+                 WHERE b.is_deleted = 0`;
     
     let params = [];
-    
     if (search) {
       query += ' AND (b.title LIKE ? OR a.author_name LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
-    
     query += ` GROUP BY b.book_id, b.title, b.published_year, a.author_name`;
     
     if (available) {
@@ -338,28 +374,16 @@ async function searchBooks(req, res, next) {
     query += ` ORDER BY b.title ASC`;
     const [results] = await db.query(query, params);
     
-    if (results.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'No books matched your search criteria.',
-        books: []
-      });
-    }
-    
-    res.json({
-      success: true,
-      count: results.length,
-      books: results
-    });
+res.json({ success: true, count: results.length, books: results });
   }
   catch(error) {
-    next(error)
+    next(error);
   }
 }
 
 async function getBookStats(req, res, next) {
 try {
-  const [totalBooksResult] = await db.query('SELECT COUNT(*) as total FROM books');
+  const [totalBooksResult] = await db.query('SELECT COUNT(*) as total FROM books WHERE is_deleted=0');
   const totalBooks = totalBooksResult[0].total;
 //Get Total Number of Available Copies (from book_copies table)
   const [availableCopiesResult] = await db.query(
